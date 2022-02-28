@@ -1,0 +1,134 @@
+Create 3 buckets:
+-----------------
+1)For storing csv file
+2)For storing parquet file
+3)For storing athena logs
+
+
+
+CSV to parquet conversion using AWS Athena:
+--------------------------------------------
+CREATE  EXTERNAL TABLE helloworld.hellocsv (
+`Id` int,
+`SEPAL_LENGTH` double,
+`SEPAL_WIDTH` double,
+`PETAL_LENGTH` double,
+`PETAL_WIDTH` double,
+`CLASS_NAME` string
+)
+ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' 
+WITH SERDEPROPERTIES (
+'serialization.format' = ',',
+'field.delim' = ','
+) LOCATION 's3://{}/'
+TBLPROPERTIES ('has_encrypted_data'='false','skip.header.line.count'='1');
+
+
+
+
+CREATE TABLE helloworld.helloparquet
+WITH (
+format = 'PARQUET',
+parquet_compression = 'SNAPPY',
+external_location = 's3://{}'
+) AS SELECT * FROM helloworld.hellocsv ;
+
+
+Inferschema:
+-------------
+--drop database if required
+drop database ramu;
+--Create Database
+create database if not exists ramu;
+--use the database
+use ramu;
+--create file format
+create file format parquet_format TYPE=parquet;
+--create external stage
+create or replace stage ramu.PUBLIC.snow_simple url="s3://{}/" 
+credentials=(aws_key_id='{}'
+aws_secret_key='{}')
+file_format = parquet_format;
+--list stage elements
+list @ramu.PUBLIC.snow_simple;
+
+select * from TABLE(INFER_SCHEMA (LOCATION=>'@ramu.PUBLIC.snow_simple',FILE_FORMAT=>'parquet_format'));
+
+
+CREATE TABLE … USING TEMPLATE:
+-------------------------------
+Recap:
+------
+create table demo_table_1 (province varchar, created_date date);
+insert into demo_table_1 (province, created_date) values
+    ('Manitoba', '2020-01-18'::date),
+    ('Alberta', '2020-01-19'::date);
+	
+select * from demo_table_1;
++----------+--------------+
+| PROVINCE | CREATED_DATE |
+|----------+--------------|
+| Manitoba | 2020-01-18   |
+| Alberta  | 2020-01-19   |
++----------+--------------+
+
+
+select object_construct(*) from demo_table_1;
++---------------------------------+
+| OBJECT_CONSTRUCT(*)             |
+|---------------------------------|
+| {                               |
+|   "CREATED_DATE": "2020-01-18", |
+|   "PROVINCE": "Manitoba"        |
+| }                               |
+| {                               |
+|   "CREATED_DATE": "2020-01-19", |
+|   "PROVINCE": "Alberta"         |
+| }                               |
++---------------------------------+
+
+
+select array_agg(object_construct(*)) from demo_table_1;
+
+[
+  {
+    "CREATED_DATE": "2020-01-18",
+    "PROVINCE": "Manitoba"
+  },
+  {
+    "CREATED_DATE": "2020-01-19",
+    "PROVINCE": "Alberta"
+  }
+]
+
+
+select ARRAY_AGG(OBJECT_CONSTRUCT(*)) from TABLE(INFER_SCHEMA (LOCATION=>'@ramu.PUBLIC.snow_simple',FILE_FORMAT=>'parquet_format'));
+
+create or replace table helloparquet using template(select ARRAY_AGG(OBJECT_CONSTRUCT(*)) from TABLE(INFER_SCHEMA (LOCATION=>'@ramu.PUBLIC.snow_simple',FILE_FORMAT=>'parquet_format')));
+
+--load data
+copy into ramu.PUBLIC.helloparquet from @ramu.PUBLIC.snow_simple MATCH_BY_COLUMN_NAME=CASE_INSENSITIVE FILE_FORMAT=parquet_format;
+
+select * from helloparquet;
+
+GENERATE_COLUMN_DESCRIPTION:
+----------------------------
+select  generate_column_description(ARRAY_AGG(OBJECT_CONSTRUCT(*)),'table')  from TABLE(INFER_SCHEMA (LOCATION=>'@ramu.PUBLIC.snow_simple',FILE_FORMAT=>'parquet_format')) ;
+
+
+select  generate_column_description(ARRAY_AGG(OBJECT_CONSTRUCT(*)),'view')  from TABLE(INFER_SCHEMA (LOCATION=>'@ramu.PUBLIC.snow_simple',FILE_FORMAT=>'parquet_format')) ;
+
+select  generate_column_description(ARRAY_AGG(OBJECT_CONSTRUCT(*)),'external_table')  from TABLE(INFER_SCHEMA (LOCATION=>'@ramu.PUBLIC.snow_simple',FILE_FORMAT=>'parquet_format')) ;
+
+--generate complete ddl script using string concatenation
+select 'create or replace external table ramu.PUBLIC.Iris_dataset( ' ||
+ generate_column_description(ARRAY_AGG(OBJECT_CONSTRUCT(*)),'external_table') || 
+') with location = @ramu.PUBLIC.snow_simple file_format =''parquet_format''' from TABLE(INFER_SCHEMA (LOCATION=>'@ramu.PUBLIC.snow_simple',FILE_FORMAT=>'parquet_format')) ;
+
+
+
+
+
+
+
+
