@@ -1,0 +1,21 @@
+clc
+clear all
+close all
+warning off
+t=0:0.01:2*pi;
+x=2*cos(t)+0.08*randn(length(t),1)';
+y=1+2*sin(t)+0.08*randn(length(t),1)';
+scatter(x,y);
+axis square
+hold on
+t=0:0.08:2*pi;
+x2=-1+0.1*cos(t)+0.08*randn(length(t),1)';
+y2=2+0.1*sin(t)+0.08*randn(length(t),1)';
+scatter(x2,y2,'k');
+hold on;
+x3=1+0.1*cos(t)+0.08*randn(length(t),1)';
+y3=2+0.1*sin(t)+0.08*randn(length(t),1)';
+scatter(x3,y3,'k')
+t1=-0.6:0.01:0.6;
+y1=t1.^2+0.08*rand(length(t1),1)';
+scatter(t1,y1)
