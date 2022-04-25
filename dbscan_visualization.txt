@@ -1,0 +1,31 @@
+clc
+clear all
+close all
+warning off
+load matlab.mat
+x=[x';x2';x3';t1'];
+y=[y';y2';y3';y1'];
+for i=1:length(x)
+    plot(x(i),y(i),'.','MarkerSize',10);
+    axis([-3 3 -1.5 3.5]);
+    drawnow limitrate;
+    hold on;
+end
+hold on;
+data=[x y];
+idx=dbscan(data,0.2,15);
+for i=1:length(x)
+    if(idx(i)==1)
+       plot(x(i),y(i),'r.','MarkerSize',20);
+    elseif(idx(i)==2)
+       plot(x(i),y(i),'g.','MarkerSize',20);
+    elseif(idx(i)==3)
+       plot(x(i),y(i),'b.','MarkerSize',20);
+    elseif(idx(i)==4)
+       plot(x(i),y(i),'m.','MarkerSize',20);
+    else
+       plot(x(i),y(i),'c.','MarkerSize',20);
+    end
+       drawnow limitrate;
+       hold on;
+end
