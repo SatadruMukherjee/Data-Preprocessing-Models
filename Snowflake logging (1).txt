@@ -1,0 +1,146 @@
+DROP DATABASE IF EXISTS RAMU;
+
+CREATE DATABASE RAMU;
+
+USE RAMU;
+
+CREATE or replace TABLE log_storer(log_key number ,Stored_procedure_name  text,Success_status VARCHAR(1),log_message Text,Start_time String,End_time String);
+
+CREATE OR REPLACE PROCEDURE open_sp_process(Stored_procedure_name STRING)
+RETURNS STRING
+LANGUAGE JAVASCRIPT
+AS
+$$
+
+  var my_sql_command_date = "select to_char(current_timestamp(2)) as curr_time";
+  var statement1 = snowflake.createStatement( {sqlText: my_sql_command_date} );
+  var result_set1 = statement1.execute();
+  result_set1.next();
+  var time_info= result_set1.getColumnValue(1);
+  
+  var my_sql_command_2 = "select coalesce( max(log_key),0 )  from log_storer";
+  var statement2 = snowflake.createStatement( {sqlText: my_sql_command_2} );
+  var result_set2 = statement2.execute();
+  result_set2.next();
+  var log_key_for_the_entry= result_set2.getColumnValue(1)+1;
+  
+  var my_sql_command_3 = "INSERT INTO log_storer (log_key,Stored_procedure_name,Success_status,Start_time) values ("+log_key_for_the_entry+",'"+STORED_PROCEDURE_NAME+"','"+'I'+"','"+time_info+"')";
+  var statement3 = snowflake.createStatement( {sqlText: my_sql_command_3} );
+  var result_set3 = statement3.execute();
+  
+  
+  return log_key_for_the_entry;
+$$;
+
+
+CREATE OR REPLACE PROCEDURE close_sp_process(log_key String,success_status String,log_message STRING)
+RETURNS String
+LANGUAGE JAVASCRIPT
+AS
+$$
+
+  var my_sql_command_date = "select to_char(current_timestamp(2)) as curr_time";
+  var statement1 = snowflake.createStatement( {sqlText: my_sql_command_date} );
+  var result_set1 = statement1.execute();
+  result_set1.next();
+  var time_info= result_set1.getColumnValue(1);
+
+  
+  var my_sql_command_3 = "UPDATE log_storer set Success_status='"+SUCCESS_STATUS+"',log_message='"+LOG_MESSAGE+"',End_time='"+time_info+"' where log_key="+LOG_KEY;
+  var statement3 = snowflake.createStatement( {sqlText: my_sql_command_3} );
+  var result_set3 = statement3.execute();
+  return 'Done'
+$$;
+
+
+
+
+--Case 1: Testing correct Procedure 
+
+CREATE OR REPLACE PROCEDURE my_test1()
+RETURNS STRING
+LANGUAGE JAVASCRIPT
+AS
+$$
+function sql_runner_with_return(sql_to_be_executed)
+{
+  var my_sql_command = sql_to_be_executed;
+  var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+  var result_set1 = statement1.execute();
+  result_set1.next();
+  var log_key= result_set1.getColumnValue(1);
+  return log_key
+}
+
+function sql_runner_without_return(sql_to_be_executed)
+{
+  var my_sql_command = sql_to_be_executed;
+  var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+  var result_set1 = statement1.execute();
+}
+
+try
+  {
+    var log_key=sql_runner_with_return("call open_sp_process('RAMU.PUBLIC.my_test')")
+    var x=10/10;
+    sql_runner_with_return("call system$wait(10)");
+    var closing_command ="call close_sp_process("+log_key+",'C','Stored Procedure Successfully completed')"
+    sql_runner_without_return(closing_command)
+    return log_key;
+  }
+catch(ERROR)
+  {
+  var closing_command ="call close_sp_process("+log_key+",'E','"+ERROR+"')"
+  sql_runner_without_return(closing_command)
+    return ERROR
+  }
+$$;
+
+select * from log_storer;
+
+call my_test1();
+
+select * from log_storer;
+
+--Case 2: Testing wrong Procedure 
+
+CREATE OR REPLACE PROCEDURE my_test2()
+RETURNS STRING
+LANGUAGE JAVASCRIPT
+AS
+$$
+function sql_runner_with_return(sql_to_be_executed)
+{
+  var my_sql_command = sql_to_be_executed;
+  var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+  var result_set1 = statement1.execute();
+  result_set1.next();
+  var log_key= result_set1.getColumnValue(1);
+  return log_key
+}
+function sql_runner_without_return(sql_to_be_executed)
+{
+  var my_sql_command = sql_to_be_executed;
+  var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+  var result_set1 = statement1.execute();
+}
+try
+  {
+    var log_key=sql_runner_with_return("call open_sp_process('RAMU.PUBLIC.my_test')")
+    var x=10/10;
+    sql_runner_with_return("call system$wait(10)");
+    SUM(2,3)
+    var closing_command ="call close_sp_process("+log_key+",'C','Stored Procedure Successfully completed')"
+    sql_runner_without_return(closing_command)
+    return log_key;
+  }
+catch(ERROR)
+  {
+  var closing_command ="call close_sp_process("+log_key+",'E','"+ERROR+"')"
+  sql_runner_without_return(closing_command)
+    return ERROR
+  }
+$$;
+
+
+call my_test2();
