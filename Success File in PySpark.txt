@@ -1,0 +1,186 @@
+Step 1:
+-------
+Create a Snowflake Table
+
+CREATE or replace DATABASE  "RAMU";
+
+create or replace table Products (ProductID int,ProductName String,SupplierID int , CategoryID int,Unit String,Price int);
+
+insert into Products values (1,'Chais',1,1,'10 boxes x 20 bags',18),
+(2,'Chang',1,1,'24 - 12 oz bottles',19),
+(3,'Aniseed Syrup',1,2,'12 - 550 ml bottles',10),
+(4,'Chef Antons Cajun Seasoning',2,2,'48 - 6 oz jars',22),
+(5,'Chef Antons Gumbo Mix',5,2,'36 boxes',10);
+
+
+select * from Products;
+
+Step 2:
+--------
+Create 3 s3 buckets --
+i)csvsnow
+ii)csvsnowwithsuccessfile
+iii)dependentjarsdemoyt
+
+Step 3:
+-------
+Upload the jar files in dependentjarsdemoyt bucket
+
+Step 4:
+--------
+
+Read the data from Snowflake using AWS Glue & write in partitioned format in s3.
+
+from pyspark.sql import SparkSession
+from pyspark import SparkContext
+
+spark = SparkSession \
+        .builder \
+        .appName("**********") \
+        .getOrCreate()
+        
+def main():
+    
+    SNOWFLAKE_SOURCE_NAME = "net.snowflake.spark.snowflake"
+    snowflake_database="**********"
+    snowflake_schema="**********"
+    source_table_name="**********"
+    snowflake_options = {
+        "sfUrl": "**********",
+        "sfUser": "**********",
+        "sfPassword": "",
+        "sfDatabase": snowflake_database,
+        "sfSchema": snowflake_schema,
+        "sfWarehouse": "**********"
+    }
+    df = spark.read \
+        .format(SNOWFLAKE_SOURCE_NAME) \
+        .options(**snowflake_options) \
+        .option("query","**********") \
+        .load()
+    
+    df.write.format('csv').partitionBy('categoryid').mode('overwrite').save('{}')
+
+    
+
+
+main()
+
+Step 5:
+--------
+Execute the below queries in Athena --
+
+create database helloworldtest;
+
+create  table helloworldtest.Products (
+ProductID int,ProductName String,SupplierID int ,Unit String,Price int
+)
+PARTITIONED BY (CATEGORYID int)
+    ROW FORMAT DELIMITED
+      FIELDS TERMINATED BY ','
+      ESCAPED BY '\\'
+      LINES TERMINATED BY '\n'
+    LOCATION '{}';
+    
+select * from helloworldtest.Products;
+
+MSCK REPAIR TABLE helloworldtest.Products;
+
+Automate the process--
+-----------------------
+import json
+import boto3
+
+def lambda_handler(event, context):
+    # TODO implement
+    print(event)
+    athena_client = boto3.client('athena')
+    query="MSCK REPAIR TABLE {}";
+    
+    athena_query_response = athena_client.start_query_execution(
+                                   QueryString = query,
+                                   QueryExecutionContext = {
+                                       'Database': "{}"
+                                   },
+                                   ResultConfiguration = {
+                                       'OutputLocation': "{}",
+                                   }
+                                  )
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
+
+Updated Glue Code--
+--------------------
+from pyspark.sql import SparkSession
+from pyspark import SparkContext
+
+spark = SparkSession \
+        .builder \
+        .appName("**********") \
+        .getOrCreate()
+        
+def main():
+    
+    SNOWFLAKE_SOURCE_NAME = "net.snowflake.spark.snowflake"
+    snowflake_database="**********"
+    snowflake_schema="**********"
+    source_table_name="**********"
+    snowflake_options = {
+        "sfUrl": "**********",
+        "sfUser": "**********",
+        "sfPassword": "",
+        "sfDatabase": snowflake_database,
+        "sfSchema": snowflake_schema,
+        "sfWarehouse": "**********"
+    }
+    df = spark.read \
+        .format(SNOWFLAKE_SOURCE_NAME) \
+        .options(**snowflake_options) \
+        .option("query","select * from {}") \
+        .load()
+    
+    df.write.format('csv').partitionBy('categoryid').mode('overwrite').option("mapreduce.fileoutputcommitter.marksuccessfuljobs", True).save('{}')
+
+    
+
+
+main()
+
+Create an Athena Table --
+create  table helloworldtest.Products_with_success_file (
+ProductID int,ProductName String,SupplierID int ,Unit String,Price int
+)
+PARTITIONED BY (CATEGORYID int)
+    ROW FORMAT DELIMITED
+      FIELDS TERMINATED BY ','
+      ESCAPED BY '\\'
+      LINES TERMINATED BY '\n'
+    LOCATION '{}';
+
+
+Create a new lambda--
+
+import json
+import boto3
+
+def lambda_handler(event, context):
+    # TODO implement
+    print(event)
+    athena_client = boto3.client('athena')
+    query="MSCK REPAIR TABLE {}";
+    
+    athena_query_response = athena_client.start_query_execution(
+                                   QueryString = query,
+                                   QueryExecutionContext = {
+                                       'Database': "{}"
+                                   },
+                                   ResultConfiguration = {
+                                       'OutputLocation': "{}",
+                                   }
+                                  )
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
