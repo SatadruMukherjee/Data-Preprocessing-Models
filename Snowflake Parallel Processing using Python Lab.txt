@@ -1,0 +1,152 @@
+
+Snowflake Code:
+---------------------------------
+--drop database if required
+drop database if exists ramu;
+--Create Database
+create database if not exists ramu;
+--use the database
+use ramu;
+
+
+create or replace table employee_history(employee_id number,
+                     empl_join_date date,
+                     dept varchar(10),
+                     salary number,
+                     manager_id number,t timestamp default current_timestamp());
+                     
+                     
+
+create or replace procedure demostoredprocedure(run_this_sql_query Varchar)
+  returns String not null
+  language javascript
+  as     
+  $$  
+    var my_sql_command_3 ="call system$wait(10)"
+    var statement3 = snowflake.createStatement( {sqlText: my_sql_command_3} );
+    var result_set3 = statement3.execute();
+    var my_sql_command_2 = RUN_THIS_SQL_QUERY;
+    var statement2 = snowflake.createStatement( {sqlText: my_sql_command_2} );
+    var result_set2 = statement2.execute();
+return "Done"; // Replace with something more useful.
+  $$
+  ;
+  
+
+  
+select * from employee_history;
+
+
+create or replace table employee_history_parallel(employee_id number,
+                     empl_join_date date,
+                     dept varchar(10),
+                     salary number,
+                     manager_id number,t timestamp default current_timestamp());
+                     
+select * from employee_history_parallel;
+
+
+
+Sequential Execution:
+-------------------------
+import pandas as pd
+import time
+import snowflake.connector as sf
+
+user=""
+password=""
+account=""
+conn=sf.connect(user=user,password=password,account=account)
+
+
+cursor = conn.cursor()
+
+statement_1 = 'use warehouse COMPUTE_WH'
+cursor.execute(statement_1)
+statement2 = "alter warehouse COMPUTE_WH resume  IF SUSPENDED"
+cursor.execute(statement2)
+statement3 = "use database RAMU"
+cursor.execute(statement3)
+statement4 = "use role ACCOUNTADMIN"
+cursor.execute(statement4)
+statement5 = "use schema PUBLIC"
+cursor.execute(statement5)
+
+
+
+
+df=pd.read_csv('{}')
+
+for index,row in df.iterrows():
+    query_to_be_executed=row['Query'].replace("'","''")
+    print(query_to_be_executed)
+    exeucte_snowflake_query="""call demostoredprocedure('{}');""".format(query_to_be_executed)
+    print("Executing the query :{} ".format(exeucte_snowflake_query))
+    cursor.execute(exeucte_snowflake_query)
+
+Parallel Execution:
+-------------------------
+
+import pandas as pd
+import time
+import snowflake.connector as sf
+import warnings
+warnings.filterwarnings('ignore')
+
+user=""
+password=""
+account=""
+conn=sf.connect(user=user,password=password,account=account)
+
+
+cursor = conn.cursor()
+
+statement_1 = 'use warehouse COMPUTE_WH'
+cursor.execute(statement_1)
+statement2 = "alter warehouse COMPUTE_WH resume  IF SUSPENDED"
+cursor.execute(statement2)
+statement3 = "use database RAMU"
+cursor.execute(statement3)
+statement4 = "use role ACCOUNTADMIN"
+cursor.execute(statement4)
+statement5 = "use schema PUBLIC"
+cursor.execute(statement5)
+
+
+def get_status(cur_list):
+    print("Check the status of the query list : {}".format(cur_list))
+    status=[]
+    df=pd.DataFrame(columns=['Query_id','Status'])
+    arr=cur_list
+    for query_id in cur_list:
+        status_for_the_query=conn.get_query_status(query_id).name
+        status.append(status_for_the_query)
+        df=df.append({'Query_id':query_id,'Status':status_for_the_query},ignore_index=True)
+    if status.count('RUNNING')>1:
+        del status[:]
+        print(df)
+        print("One or more commands still running")
+        time.sleep(5)
+        get_status(arr)
+    else:
+        print("All commands execution done!")
+        print(df)
+    return
+
+
+query_ids=[]
+
+df=pd.read_csv('{}')
+
+for index,row in df.iterrows():
+    query_to_be_executed=row['Query'].replace("'","''")
+    print(query_to_be_executed)
+    exeucte_snowflake_query="""call demostoredprocedure('{}');""".format(query_to_be_executed)
+    print("Executing the query :{} ".format(exeucte_snowflake_query))
+    cursor.execute_async(exeucte_snowflake_query)
+    query_id=cursor.sfqid
+    print("Query id for the above query execution : {}".format(query_id))
+    query_ids.append(query_id)
+
+get_status(query_ids)
+
