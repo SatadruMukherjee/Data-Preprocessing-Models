@@ -1,0 +1,132 @@
+Snowflake Code:
+-------------------
+--drop database if required
+drop database if exists ramu;
+--Create Database
+create database if not exists ramu;
+--use the database
+use ramu;
+
+--File Format Creation
+create or replace file format my_csv_format
+type = csv field_delimiter = ',' skip_header = 1
+field_optionally_enclosed_by = '"'
+null_if = ('NULL', 'null') 
+empty_field_as_null = true;
+
+
+--External stage creation
+create or replace stage second_stage url="s3://demoexternaltesting/" 
+credentials=(aws_key_id='{}'
+aws_secret_key='{}');
+
+
+--Create first external  table
+create or replace external table Iris_dataset (Id number(10,0) as (Value:c1::int),sepal_length number(10,5) as  (Value:c2::number(10,5)),
+sepal_width number(10,4) as (Value:c3::number(10,4)),petal_length number(10,3) as (Value:c4::number(10,3)), 
+petal_width number(10,4) as (Value:c5::number(10,4)), CLASS_NAME varchar(20) as (Value:c6::varchar)) with location = @second_stage/csvset/ file_format ='my_csv_format';
+
+select * from Iris_dataset;
+
+select distinct CLASS_NAME FROM Iris_dataset;
+
+
+--Json file-format creation
+create or replace file format json_format_strip_outer_array
+  type = 'json' STRIP_OUTER_ARRAY=TRUE;  
+  
+--Create second external  table
+create OR REPLACE external table json_testing_with_array with location = @second_stage/jsonset/ file_format ='json_format_strip_outer_array';
+
+select * from json_testing_with_array;
+
+
+create or replace sequence seq_01 start = 1 increment = 1;
+
+
+--metadata table creation
+create or replace table Snowflake_refresher(SEQUENCE_NUMBER  Int default seq_01.NEXTVAL,
+                     DATABASE_NAME VARCHAR(16777216),
+                     SCHEMA_NAME VARCHAR(16777216),
+                     TABLE_NAME  VARCHAR(16777216),
+                     PIPELINE VARCHAR(16777216),Refresh_Indicator VARCHAR(1),UPDATED_BY VARCHAR(16777216));
+                     
+INSERT INTO Snowflake_refresher (DATABASE_NAME,SCHEMA_NAME,TABLE_NAME,PIPELINE,Refresh_Indicator,UPDATED_BY)
+VALUES('RAMU','PUBLIC','Iris_dataset','first_pipeline','Y','Ramesh');
+
+
+INSERT INTO Snowflake_refresher (DATABASE_NAME,SCHEMA_NAME,TABLE_NAME,PIPELINE,Refresh_Indicator,UPDATED_BY)
+VALUES('RAMU','PUBLIC','json_testing_with_array','first_pipeline','Y','Suresh');
+
+
+select * from Snowflake_refresher;
+
+--Alter refresh query creator
+SELECT 'alter external table ' || DATABASE_NAME||'.'|| SCHEMA_NAME || '.' || TABLE_NAME || ' refresh' as refresh_query from RAMU.PUBLIC.Snowflake_refresher where PIPELINE='first_pipeline'  
+and Refresh_Indicator='Y';
+
+create or replace procedure refresh_table_sf(table_group string)
+  returns String not null
+  language javascript
+  as     
+  $$  
+    var my_sql_command = "SELECT 'alter external table ' || DATABASE_NAME||'.'|| SCHEMA_NAME || '.' || TABLE_NAME || ' refresh' from RAMU.PUBLIC.Snowflake_refresher where PIPELINE='"+TABLE_GROUP+"'  and Refresh_Indicator='Y'";
+    var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+    var result_set1 = statement1.execute();
+    while (result_set1.next())  {
+       query_to_be_executed=result_set1.getColumnValue(1);
+        var statement2 = snowflake.createStatement( {sqlText: query_to_be_executed} );
+       statement2.execute(); 
+       }
+       return "Refresh Successful"// Replace with something more useful.
+  $$
+  ;
+  
+call refresh_table_sf('first_pipeline');
+
+                     
+
+
+--Create third external  table
+create OR REPLACE external table album_json (Album_id number(10,0) AS (value:albumId:: number(10,0)),
+ID number(10,0) AS (value:id:: number(10,0)),
+title VARCHAR(16777216) AS (value:title:: VARCHAR(16777216)),
+url VARCHAR(16777216) AS (value:url:: VARCHAR(16777216)),
+thumbnailUrl VARCHAR(16777216) AS (value:thumbnailUrl::VARCHAR(16777216)))
+with location = @second_stage/second_pipeline/ file_format ='json_format_strip_outer_array';
+
+select * from album_json;
+
+--Create fourth external  table
+create or replace external TABLE customer (
+	C_CUSTKEY NUMBER(38,0) AS (value:c1::NUMBER(38,0)),
+	C_NAME VARCHAR(25) AS (value:c2::VARCHAR(25)),
+	C_ADDRESS VARCHAR(40) AS (value:c3::VARCHAR(40)),
+	C_NATIONKEY NUMBER(38,0) AS (value:c4::NUMBER(38,0)),
+	C_PHONE VARCHAR(15) AS (value:c5::VARCHAR(15)),
+	C_ACCTBAL NUMBER(12,2) AS (value:c6::NUMBER(12,2)),
+	C_MKTSEGMENT VARCHAR(10) AS (value:c7::VARCHAR(10)),
+	C_COMMENT VARCHAR(117) AS (value:c8::VARCHAR(117))
+)  with location = @second_stage/customer_data/ file_format ='my_csv_format';
+
+
+
+
+select * from customer;
+
+
+
+
+
+INSERT INTO Snowflake_refresher (DATABASE_NAME,SCHEMA_NAME,TABLE_NAME,PIPELINE,Refresh_Indicator,UPDATED_BY)
+VALUES('RAMU','PUBLIC','album_json','second_pipeline','Y','Dipesh');
+
+
+INSERT INTO Snowflake_refresher (DATABASE_NAME,SCHEMA_NAME,TABLE_NAME,PIPELINE,Refresh_Indicator,UPDATED_BY)
+VALUES('RAMU','PUBLIC','customer','second_pipeline','Y','Rakesh');
+
+
+select * from Snowflake_refresher;
+
+
+
