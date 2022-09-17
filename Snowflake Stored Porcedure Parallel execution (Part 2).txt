@@ -1,0 +1,171 @@
+--drop database if required
+drop database if exists ramu;
+--Create Database
+create database if not exists ramu;
+--use the database
+use ramu;
+
+
+
+// Prepare table
+CREATE OR REPLACE TABLE video_demo (
+    ID INT AUTOINCREMENT START = 1 INCREMENT =1,
+    NAME VARCHAR(40) DEFAULT 'DemoYoutube' ,
+    CREATE_DATE timestamp);
+    
+    
+create or replace procedure dummy_executor_1()
+  returns string not null
+  language javascript
+  EXECUTE AS CALLER
+  as     
+  $$  
+    var my_sql_command = "INSERT INTO video_demo(NAME,CREATE_DATE) VALUES('From SP 1',CURRENT_TIMESTAMP)";
+    var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+    var result_set1 = statement1.execute();
+    return "Successfully Executed"
+  $$
+  ;
+create or replace procedure dummy_executor_2()
+  returns string not null
+  language javascript
+  EXECUTE AS CALLER
+  as     
+  $$  
+    var my_sql_command = "INSERT INTO video_demo(NAME,CREATE_DATE) VALUES('From SP 2',CURRENT_TIMESTAMP)";
+    var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+    var result_set1 = statement1.execute();
+    return "Successfully Executed"
+  $$
+  ;
+create or replace procedure dummy_executor_3()
+  returns string not null
+  language javascript
+  EXECUTE AS CALLER
+  as     
+  $$  
+    var my_sql_command = "INSERT INTO video_demo(NAME,CREATE_DATE) VALUES('From SP 3',CURRENT_TIMESTAMP)";
+    var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+    var result_set1 = statement1.execute();
+    return "Successfully Executed"
+  $$
+  ;
+create or replace procedure dummy_executor_4()
+  returns string not null
+  language javascript
+  EXECUTE AS CALLER
+  as     
+  $$  
+    var my_sql_command = "INSERT INTO video_demo(NAME,CREATE_DATE) VALUES('From SP 4',CURRENT_TIMESTAMP)";
+    var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+    var result_set1 = statement1.execute();
+    return "Successfully Executed"
+  $$
+  ;
+create or replace procedure dummy_executor_5()
+  returns string not null
+  language javascript
+  EXECUTE AS CALLER
+  as     
+  $$  
+    var my_sql_command = "INSERT INTO video_demo(NAME,CREATE_DATE) VALUES('From SP 5',CURRENT_TIMESTAMP)";
+    var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+    var result_set1 = statement1.execute();
+    return "Successfully Executed"
+  $$
+  ;
+create or replace procedure dummy_executor_0()
+  returns string not null
+  language javascript
+  EXECUTE AS CALLER
+  as     
+  $$  
+    var my_sql_command = "INSERT INTO video_demo(NAME,CREATE_DATE) VALUES('From SP 0',CURRENT_TIMESTAMP)";
+    var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+    var result_set1 = statement1.execute();
+    return "Successfully Executed"
+  $$
+  ;
+  
+ 
+
+create or replace procedure dummy_executor_parallel()
+  returns string not null
+  language javascript
+  EXECUTE AS CALLER
+  as     
+  $$  
+  
+    function sleep(milliseconds) {
+    const date = Date.now();
+    let currentDate = null;
+    do {
+      currentDate = Date.now();
+    } while (currentDate - date < milliseconds);
+  };
+
+
+
+    var v_Now = new Date().toISOString();
+
+
+    var query = 'CREATE OR REPLACE TASK RAMU.PUBLIC.MULTITHREAD_PARENT122 WAREHOUSE=COMPUTE_WH SCHEDULE = \'1 MINUTE\' AS SELECT CURRENT_DATE';
+    var statement = snowflake.createStatement( {sqlText: query} );
+    var result_set = statement.execute();
+    
+    var temp=0
+    while(temp<=5)
+    {
+    var query = 'CREATE OR REPLACE TASK RAMU.PUBLIC.MULTITHREAD_CHILD_1234' + temp + ' WAREHOUSE=COMPUTE_WH  AFTER RAMU.PUBLIC.MULTITHREAD_PARENT122  AS call RAMU.PUBLIC.dummy_executor_'+temp+'();';
+    var statement = snowflake.createStatement( {sqlText: query} );
+    var result_set = statement.execute();
+    
+    query = 'ALTER TASK RAMU.PUBLIC.MULTITHREAD_CHILD_1234' + temp + '  RESUME;';
+    var statement = snowflake.createStatement( {sqlText: query} );
+    var result_set = statement.execute();
+    
+    
+    temp=temp+1
+    }
+    
+    query = 'ALTER TASK RAMU.PUBLIC.MULTITHREAD_PARENT122  RESUME;';
+    var statement = snowflake.createStatement( {sqlText: query} );
+    var result_set = statement.execute();
+    
+    var v_QueryID = '';
+    
+    sleep(90000);
+    
+    while (v_QueryID == '') 
+    {
+    
+    v_Query = 'SELECT COALESCE(QUERY_ID, \'\') AS QUERY_ID FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY()) \
+      WHERE SCHEMA_NAME = \'PUBLIC\' AND NAME = \'MULTITHREAD_PARENT122\' AND QUERY_START_TIME IS NOT NULL AND SCHEDULED_TIME > \'' + v_Now + '\' \
+      ORDER BY SCHEDULED_TIME DESC LIMIT 1;';
+      
+      
+    v_Statement = snowflake.createStatement( {sqlText: v_Query} );
+    rs = v_Statement.execute();
+    
+    while (rs.next()) 
+    {
+      v_QueryID = rs.getColumnValue('QUERY_ID');
+    };
+    
+    sleep(10000);
+  };
+    
+  // Suspend the main task & clean up all tasks
+  v_Query = 'ALTER TASK RAMU.PUBLIC.MULTITHREAD_PARENT122 SUSPEND;';
+  snowflake.execute( {sqlText: v_Query} );
+  v_Statement = snowflake.createStatement( {sqlText: v_Query} );
+  v_Statement.execute();
+    return "Success"
+  $$
+  ;
+  
+  
+  call dummy_executor_parallel();
+  
+  
+  select * from video_demo;
