@@ -1,0 +1,137 @@
+--drop database if required
+drop database if exists ramu;
+--Create Database
+create database if not exists ramu;
+--use the database
+use ramu;
+
+
+
+// Prepare table
+CREATE OR REPLACE TABLE video_demo (
+    ID INT AUTOINCREMENT START = 1 INCREMENT =1,
+    NAME VARCHAR(40) DEFAULT 'DemoYoutube' ,
+    CREATE_DATE timestamp);
+    
+    
+create or replace procedure dummy_executor()
+  returns string not null
+  language javascript
+  as     
+  $$  
+    var my_sql_command = "INSERT INTO video_demo(CREATE_DATE) VALUES(CURRENT_TIMESTAMP)";
+    var statement1 = snowflake.createStatement( {sqlText: my_sql_command} );
+    var result_set1 = statement1.execute();
+    return "Successfully Executed"
+  $$
+  ;
+  
+ 
+ set my_variable=(select current_timestamp());
+ 
+ select $my_variable;
+
+
+
+ 
+// Create task
+CREATE OR REPLACE TASK INSERT_DATA_SET_123456789
+    WAREHOUSE = COMPUTE_WH
+    SCHEDULE = '1 MINUTE'
+    AS call dummy_executor()
+    ;
+    
+
+SHOW TASKS;
+
+select * from video_demo;
+
+// Task starting and suspending
+ALTER TASK INSERT_DATA_SET_123456789 RESUME;
+
+
+SELECT  * FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY()) WHERE SCHEMA_NAME = 'PUBLIC' AND NAME = 'INSERT_DATA_SET_123456789' ;
+
+
+
+SELECT *  FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY()) 
+WHERE SCHEMA_NAME = 'PUBLIC' AND NAME = 'INSERT_DATA_SET_123456789' AND QUERY_START_TIME IS NOT NULL AND SCHEDULED_TIME > $my_variable
+ORDER BY SCHEDULED_TIME DESC LIMIT 1;
+
+SELECT COALESCE(QUERY_ID, '') AS QUERY_ID FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY()) 
+WHERE SCHEMA_NAME = 'PUBLIC' AND NAME = 'INSERT_DATA_SET_123456789' AND QUERY_START_TIME IS NOT NULL AND SCHEDULED_TIME > $my_variable
+ORDER BY SCHEDULED_TIME DESC LIMIT 1;
+      
+
+           
+
+ALTER TASK INSERT_DATA_SET_123456789 SUSPEND;
+
+
+
+
+create or replace procedure dummy_executoryt123()
+  returns string not null
+  language javascript
+  EXECUTE AS CALLER
+  as     
+  $$  
+  
+    function sleep(milliseconds) {
+    const date = Date.now();
+    let currentDate = null;
+    do {
+      currentDate = Date.now();
+    } while (currentDate - date < milliseconds);
+  };
+
+
+
+    var v_Now = new Date().toISOString();
+
+
+    var query = 'CREATE OR REPLACE TASK RAMU.PUBLIC.MULTITHREAD_CHILD_12345678 WAREHOUSE=COMPUTE_WH SCHEDULE = \'1 MINUTE\' AS call RAMU.PUBLIC.dummy_executor();';
+    var statement = snowflake.createStatement( {sqlText: query} );
+    var result_set = statement.execute();
+    
+    query = 'ALTER TASK RAMU.PUBLIC.MULTITHREAD_CHILD_12345678  RESUME;';
+    var statement = snowflake.createStatement( {sqlText: query} );
+    var result_set = statement.execute();
+    
+    var v_QueryID = '';
+    
+    sleep(90000);
+    
+    while (v_QueryID == '') 
+    {
+    
+    v_Query = 'SELECT COALESCE(QUERY_ID, \'\') AS QUERY_ID FROM TABLE(INFORMATION_SCHEMA.TASK_HISTORY()) \
+      WHERE SCHEMA_NAME = \'PUBLIC\' AND NAME = \'MULTITHREAD_CHILD_12345678\' AND QUERY_START_TIME IS NOT NULL AND SCHEDULED_TIME > \'' + v_Now + '\' \
+      ORDER BY SCHEDULED_TIME DESC LIMIT 1;';
+      
+      
+    v_Statement = snowflake.createStatement( {sqlText: v_Query} );
+    rs = v_Statement.execute();
+    
+    while (rs.next()) 
+    {
+      v_QueryID = rs.getColumnValue('QUERY_ID');
+    };
+    
+    sleep(10000);
+  };
+    
+  // Suspend the main task & clean up all tasks
+  v_Query = 'ALTER TASK RAMU.PUBLIC.MULTITHREAD_CHILD_12345678 SUSPEND;';
+  snowflake.execute( {sqlText: v_Query} );
+  v_Statement = snowflake.createStatement( {sqlText: v_Query} );
+  v_Statement.execute();
+    return "Success"
+  $$
+  ;
+  
+  
+  call dummy_executoryt123();
+  
+  
+  select * from video_demo;
