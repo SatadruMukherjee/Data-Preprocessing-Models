@@ -1,0 +1,119 @@
+Step Function Code:
+--------------------------
+{
+  "Comment": "A description of my state machine",
+  "StartAt": "SQS SendMessage",
+  "States": {
+    "SQS SendMessage": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sqs:sendMessage.waitForTaskToken",
+      "Parameters": {
+        "MessageBody": {
+          "input.$": "$",
+          "MyTaskToken.$": "$$.Task.Token"
+        },
+        "QueueUrl": "{Put the SQS Queue URL here}"
+      },
+      "Next": "Choice"
+    },
+    "Choice": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.body",
+          "StringEquals": "Approved",
+          "Next": "Success"
+        }
+      ],
+      "Default": "Fail"
+    },
+    "Success": {
+      "Type": "Succeed"
+    },
+    "Fail": {
+      "Type": "Fail"
+    }
+  }
+}
+
+Step Function Sample Input:
+-----------------------------
+{
+  "Manager Mail Address": "{}",
+  "Employee Name":"{}"
+}
+
+Callback Lambda Code:
+-----------------------------
+import json
+import boto3
+import time
+import urllib
+
+client = boto3.client("ses")
+
+def lambda_handler(event, context):
+    main_message=json.loads(event['Records'][0]['body'])
+    print("Main Message Part : {}".format(main_message))
+    
+    step_fucntion_input=main_message['input']
+    
+    manager_main_address=step_fucntion_input['Manager Mail Address']
+    employee_to_be_promoted=step_fucntion_input['Employee Name']
+
+    
+    task_token=main_message['MyTaskToken']
+    print("The task token is : {}".format(task_token))
+    task_token_encode=urllib.parse.quote(task_token)
+    body = """
+                 Hi,<br>
+                     {} has been nominated for promotion!<br />.
+                     
+                 Can you please approve:<br />
+                 
+                 {Put the API Invoke URL here}/approve?TaskToken={}<br />
+                 
+                 Or reject:<br />
+                 
+                 {Put the API Invoke URL here}/reject?TaskToken={}
+         """.format(employee_to_be_promoted, task_token_encode,task_token_encode)
+         
+    message = {"Subject": {"Data": 'Your Approval Needed for Promotion!'}, "Body": {"Html": {"Data": body}}}
+    
+    response = client.send_email(Source = manager_main_address, Destination = {"ToAddresses": [manager_main_address]}, Message = message) 
+    
+    print("The mail is sent successfully")
+    
+
+
+Approve Handler:
+------------------------
+import json
+import boto3
+import time
+
+client = boto3.client('stepfunctions')
+
+def lambda_handler(event, context):
+    task_token=event['queryStringParameters']['TaskToken']
+    print(task_token)
+    response = client.send_task_success(
+    taskToken=task_token,
+    output=json.dumps({'body':'Approved'})
+    )
+	
+	
+Reject Handler:
+------------------
+import json
+import boto3
+import time
+
+client = boto3.client('stepfunctions')
+
+def lambda_handler(event, context):
+    task_token=event['queryStringParameters']['TaskToken']
+    response = client.send_task_success(
+    taskToken=task_token,
+    output=json.dumps({'body':'Rejected'})
+    )
