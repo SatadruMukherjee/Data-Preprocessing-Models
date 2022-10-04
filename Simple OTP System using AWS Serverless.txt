@@ -1,0 +1,102 @@
+DynamoDB Table:
+-----------------
+Table Name: otp_holder
+Primary Key: email_id 
+Sort Key: EXPIRATION_TIME
+
+
+
+OTP Generator:
+------------------
+import json
+import boto3
+import time
+from random import randint
+
+client_dynamo=boto3.resource('dynamodb')
+
+table=client_dynamo.Table('otp_holder')
+
+default_ttl = 120
+
+def lambda_handler(event, context):
+    
+    email_id=event['queryStringParameters']['email_address']
+    
+    otp_value=randint(100000, 999999)
+    
+    entry={
+    'email_id': email_id,
+    'OTP': otp_value,
+    'EXPIRATION_TIME': int(time.time()) + default_ttl
+    }
+    
+    response=table.put_item(Item=entry)
+    
+    return "A verification code is sent to the email address you provided."
+	
+	
+Send Email:
+--------------
+import json
+import boto3
+client = boto3.client("ses")
+
+
+def lambda_handler(event, context):
+    print(event)
+    if(event['Records'][0]['eventName']=='INSERT'):
+        mail_id=event['Records'][0]['dynamodb']['Keys']['email_id']['S']
+        print("The mail id is : {}".format(mail_id))
+        
+        otp=event['Records'][0]['dynamodb']['NewImage']['OTP']['N']
+        print("The mail id is : {}".format(otp))
+        
+        body = """
+                Use this code to verify your login at Simple Website<br>
+                
+                {}
+             """.format(otp)
+             
+        message = {"Subject": {"Data": 'Your OTP (valid for only 2 mins)!'}, "Body": {"Html": {"Data": body}}}
+        
+        response = client.send_email(Source = '{FromAddress}', Destination = {"ToAddresses": [mail_id]}, Message = message) 
+        
+        print("The mail is sent successfully")
+		
+Verify OTP:
+--------------
+import json
+import boto3
+import time
+client = boto3.client('dynamodb')
+
+def lambda_handler(event, context):
+    # TODO implement
+    
+    email_id=event['queryStringParameters']['email_address']
+    print("The received email id : {}".format(email_id))
+    
+    otp_from_user=event['queryStringParameters']['otp']
+    print("The received otp : {}".format(otp_from_user))
+    
+    response = client.query(
+    TableName='otp_holder',
+    KeyConditionExpression='email_id = :email_id',
+    ExpressionAttributeValues={
+        ':email_id': {'S': email_id}
+    },ScanIndexForward = False, Limit = 1)
+    
+    if(response['Count']==0):
+        return "No such OTP was shared"
+    else:
+        latest_stored_otp_value=response['Items'][0]['OTP']['N']
+        print("Latest Stored OTP Value : {}".format(latest_stored_otp_value))
+        
+        if(int(response['Items'][0]['EXPIRATION_TIME']['N'])<int(time.time())):
+            return "Time Over"
+        else:
+            if(latest_stored_otp_value==otp_from_user):
+                return "Verified"
+            else:
+                return "Wrong OTP"
