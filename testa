@@ -1,0 +1,16 @@
+    service_name = 's3'
+    region_name = 'us-east-2'
+    aws_access_key_id = ''
+    aws_secret_access_key = ''
+
+    s3_resource = boto3.resource(
+        service_name=service_name,
+        region_name=region_name,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key
+    )
+    bucket='destinationbucketdemoshow';
+    df = initial_df[(initial_df.species == "setosa")];
+    csv_buffer = StringIO()
+    df.to_csv(csv_buffer,index=False);
+    s3_resource.Object(bucket, s3_file_key).put(Body=csv_buffer.getvalue())
