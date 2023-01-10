@@ -1,0 +1,112 @@
+Step 1:
+------------
+Cretae VPC -- Name -- virtual-private-cloud  IPv4 CIDR -- 10.0.0.0/16
+Host address range -- 10.0.0.1 - 10.0.255.254
+
+Step 2:
+-----------
+Create 2 public subnets 
+Public-Subnet-A--10.0.0.0/24
+Host address range -- 10.0.0.1 - 10.0.0.254
+
+Public-Subnet-B--10.0.1.0/24
+Host address range -- 10.0.1.1 - 10.0.1.254
+
+Step 3:
+------------
+Check the default route table -- you will see the above 2 subnets have not been explicitly associated with any route tables and are therefore associated with the main route table.
+
+Step 4:
+------------
+Create a IGW & connect with VPC
+
+Step 5:
+------------
+Add the IGW in default route table
+
+
+Step 6:
+---------
+Launch MSK Cluster with vpc you created , unauthorised access allowed , plaintext enxryption
+(keep security group as it is)
+
+Step 7:
+------------
+Launch Linux EC2
+In the list Network choose the VPC previously created.
+In the list Auto-assign Public IP, choose Enable.
+
+Step 8:
+---------
+Once the client for Amazon MSK has been created, the security group rules must be configured to allow the connection between the cluster and the client that we have just created.
+
+For that , Add the security group id of ec2 to msk cluster security group all traffic
+
+Repeat these steps to add an inbound rule in the security group that corresponds to your client computer to allow it to receive traffic from the security group from the VPC. Now your client computer can communicate bidirectionally with the MSK Cluster.
+
+Once this is done, the newly created and configured client can be accessed.
+
+Step 9:
+-----------
+sudo yum install java-1.8.0-openjdk
+wget https://archive.apache.org/dist/kafka/2.8.1/kafka_2.12-2.8.1.tgz
+tar -xvf kafka_2.12-2.8.1.tgz
+cd kafka_2.12-2.8.1
+
+bin/kafka-topics.sh --create --topic demo_testing2 --bootstrap-server {Put the MSK bootstrap server URLs here} --replication-factor 1 --partitions 1
+
+
+bin/kafka-topics.sh --create --topic helloworld --bootstrap-server {Put the MSK bootstrap server URLs here}  --replication-factor 1 --partitions 1
+
+Step 10:
+-----------
+Start the kafka Producer
+---------------------------
+bin/kafka-console-producer.sh --topic demo_testing2 --bootstrap-server {Put the MSK bootstrap server URLs here} 
+
+In a new console start the kafka consumer--
+cd kafka_2.12-2.8.1
+bin/kafka-console-consumer.sh --topic helloworld --bootstrap-server {Put the MSK bootstrap server URLs here} 
+
+Step 11:
+-----------
+Install confluent kafka within kafka_2.12-2.8.1)
+wget  http://packages.confluent.io/archive/5.1/confluent-5.1.2-2.11.zip
+unzip confluent-5.1.2-2.11.zip
+
+export CONFLUENT_HOME=/home/ec2-user/kafka_2.12-2.8.1/confluent-5.1.2
+export PATH=$PATH:$CONFLUENT_HOME/bin
+(Note , if installing confluent kafka , where kafka is installed (i.e. in /home/ec2-user) , then CONFLUENT_HOME should be -- /home/ec2-user/confluent-5.1.2)
+
+Step 12:
+-----------
+Change the bootstrap.servers in  confluent-5.1.2/etc/kafka-rest/kafka-rest.properties 
+
+
+
+Step 13:
+-----------
+Start Kafka Rest 
+/home/ec2-user/kafka_2.12-2.8.1/confluent-5.1.2/bin/kafka-rest-start /home/ec2-user/kafka_2.12-2.8.1/confluent-5.1.2/etc/kafka-rest/kafka-rest.properties 
+
+(Don't forget to allow all traffic to the security group of EC2 client machine)
+
+Url to post messages using Kafka rest API--
+http://{Put your cleint machine's Public IP here}:8082/topics/demo_testing2
+
+Content-Type: application/vnd.kafka.json.v2+json
+
+Sample Message:
+------------------
+{"records":[{"value":{"name": "testUser"}}]}
+
+Start consumer to see the messages:
+----------------------------------------
+cd kafka_2.12-2.8.1
+bin/kafka-console-consumer.sh --topic demo_testing2 --bootstrap-server {Put the MSK bootstrap server URLs here} 
+
+
+
+
+
+
