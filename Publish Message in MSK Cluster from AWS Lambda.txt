@@ -1,0 +1,81 @@
+Code to install Java & Kafka in EC2 Client Machine:
+---------------------------------------------------------------------------
+sudo yum install java-1.8.0-openjdk
+wget https://archive.apache.org/dist/kafka/2.8.1/kafka_2.12-2.8.1.tgz
+tar -xvf kafka_2.12-2.8.1.tgz
+
+Creating Kafka Topic:
+----------------------------------
+cd kafka_2.12-2.8.1
+bin/kafka-topics.sh --create --topic {topic_name} --bootstrap-server {Put the MSK bootstrap server URLs here} --replication-factor 1 --partitions 1
+
+Start Console Consumer:
+----------------------------------
+cd kafka_2.12-2.8.1
+bin/kafka-console-consumer.sh --topic {Topic Name} --bootstrap-server {Put the MSK bootstrap server URLs here}
+ 
+Start Python Producer:
+----------------------------------
+Install the Python Module:
+------------------------------------
+pip install kafka-python
+
+Producer Code:
+------------------------------------
+from time import sleep
+from json import dumps
+from kafka import KafkaProducer
+
+topic_name='{Topic Name}'
+producer = KafkaProducer(bootstrap_servers=['{Put 1st MSK bootstrap server URL here}','{Put 2nd MSK bootstrap server URL here}',...],value_serializer=lambda x: dumps(x).encode('utf-8'))
+
+for e in range(1000):
+    data = {'number' : e}
+    print(data)
+    producer.send(topic_name, value=data)
+    sleep(1)
+
+
+
+
+
+Code to create the Lambda Layer:
+---------------------------------------------------------
+sudo apt-get update
+sudo apt install python3-virtualenv
+virtualenv kafka_yt
+source kafka_yt/bin/activate
+python3 --version  
+sudo apt install python3-pip
+python3 -m pip install --upgrade pip
+mkdir -p lambda_layers/python/lib/python3.8/site-packages
+cd lambda_layers/python/lib/python3.8/site-packages
+pip install  kafka-python -t .
+cd /mnt/c/Users/USER/lambda_layers
+sudo apt install zip
+zip -r kafka_yt_demo.zip *
+
+
+Lambda Security Confuguration:
+--------------------------------------
+Provide AmazonVPCFullAccess to the Lambda execution role
+Configure VPC for Lambda (Choose both subnets & provide the security group of MSK Cluster)
+
+
+Lambda Code to publish messages in MSK Topic:
+----------------------------------------------------------------
+from time import sleep
+from json import dumps
+from kafka import KafkaProducer
+
+topic_name='{Topic Name}'
+producer = KafkaProducer(bootstrap_servers=['{Put 1st MSK bootstrap server URL here}','{Put 2nd MSK bootstrap server URL here}',...],value_serializer=lambda x: dumps(x).encode('utf-8'))
+
+def lambda_handler(event, context):
+    for e in range(10):
+        data = e
+        producer.send(topic_name, value=data)
+        sleep(0.5)
+
+
+
