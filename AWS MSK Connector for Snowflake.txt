@@ -1,0 +1,105 @@
+Launch MSK Cluster:
+----------------------
+Configure NAT Gateway & launch MSK Cluster in Private Subnet
+
+
+openssl genrsa -out rsa_key.pem 2048
+openssl rsa -in rsa_key.pem -pubout -out rsa_key.pub
+
+These files contain keys that may contain spaces and new line characters which need to be removed--
+export SNOWFLAKE_PVT_KEY=$(echo `sed -e '2,$!d' -e '$d' -e 's/\n/ /g' rsa_key.pem`|tr -d ' ')
+echo $SNOWFLAKE_PVT_KEY > rsa_key_p8.out
+
+Configure Snowflake:
+--------------------------
+cat rsa_key.pub
+
+DROP DATABASE IF EXISTS RAMU;
+Create database ramu;
+alter user Satadru set rsa_public_key='';
+
+desc user satadru;
+use ramu;
+show tables;
+
+
+In EC2 Client Machine:
+-----------------------------
+sudo yum install java-1.8.0-openjdk
+wget https://archive.apache.org/dist/kafka/2.8.1/kafka_2.12-2.8.1.tgz
+tar -xvf kafka_2.12-2.8.1.tgz
+cd kafka_2.12-2.8.1
+
+bin/kafka-topics.sh --create --topic demo_testing2 --bootstrap-server {} --replication-factor 1 --partitions 2
+
+
+Create Custom plugins:
+-------------------------
+https://mvnrepository.com/artifact/com.snowflake/snowflake-kafka-connector/1.5.0
+
+
+For Kafka Connect Config:
+---------------------------
+IAM Role:s3--give s3 full access
+
+Trust Relationship--
+
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "kafkaconnect.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole",
+            "Condition": {
+                "StringEquals": {
+                    "aws:SourceAccount": "Account ID"
+                }
+            }
+        }
+    ]
+}
+
+Create a cloudwatch log group
+
+
+Connector Config:
+-------------------------
+
+connector.class=com.snowflake.kafka.connector.SnowflakeSinkConnector
+tasks.max=8
+topics=demo_testing2
+snowflake.topic2table.map=demo_testing2:fake_data_real_time_demo
+buffer.count.records=10000
+buffer.flush.time=60
+buffer.size.bytes=5000000
+snowflake.url.name=
+snowflake.user.name=
+snowflake.private.key=
+snowflake.database.name=RAMU
+snowflake.schema.name=PUBLIC
+key.converter=com.snowflake.kafka.connector.records.SnowflakeJsonConverter
+value.converter=com.snowflake.kafka.connector.records.SnowflakeJsonConverter
+
+
+Test:
+-------
+Produce messages:
+---------------------
+bin/kafka-console-producer.sh --topic demo_testing2 --bootstrap-server {}
+
+Consume messages:
+---------------------
+bin/kafka-console-consumer.sh --topic demo_testing2 --bootstrap-server {}
+
+Destination:
+-----------------
+select * from ramu.public.fake_data_real_time_demo;
+
+Sample Data to Publish:
+------------------------------
+{"email":"wzanettinirp@stanford.edu","timestamp":1663420415,"event":"spamreport","gender":"Female","ip_address":"8.166.173.156"}
+{"email":"pstegersrq@reddit.com","timestamp":1664321942,"event":"spamreport","gender":"Female","ip_address":"128.214.160.228"}
+{"email":"avlahosrr@posterous.com","timestamp":1646024825,"event":"bounce","gender":"Female","ip_address":"147.51.176.231"}
