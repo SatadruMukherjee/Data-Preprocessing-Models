@@ -1,0 +1,6 @@
+Getting Started with AWS Managed Streaming for Kafka with in-depth service setup
+https://youtube.com/watch?v=BFKmQAafE_c&feature=shares
+Capturing client events using Amazon API Gateway and Amazon EventBridge
+https://youtube.com/watch?v=mcpnhZThZ7s&feature=shares
+End to End Streaming Data Pipeline Using AWS MSK & AWS Serverless Services
+https://youtube.com/watch?v=l5ypWBHMsNY&feature=shares
