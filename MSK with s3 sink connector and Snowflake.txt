@@ -1,0 +1,164 @@
+Documentation:
+------------------
+https://aws.amazon.com/blogs/big-data/back-up-and-restore-kafka-topic-data-using-amazon-msk-connect/
+
+
+Step 1:Launch MSK Cluster:
+-------------------------------------
+Configure NAT Gateway & launch MSK Cluster in Private Subnet
+
+Step 2:
+----------
+Create IAM role for MSK Connect--s3connectordemoyt
+
+IAM Role:s3--give s3 full access,kms access , msk access
+
+Trust Relationship--
+
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": "kafkaconnect.amazonaws.com"
+            },
+            "Action": "sts:AssumeRole",
+            "Condition": {
+                "StringEquals": {
+                    "aws:SourceAccount": ""
+                }
+            }
+        }
+    ]
+}
+
+Step 3:
+-----------
+Download the Jar from the below link --
+https://github.com/lensesio/stream-reactor/releases
+
+Uplaod the jar file in s3
+
+
+Step 4:
+---------
+Create the custom plugin using the jar uplaoded in s3 in Step 3
+s3sinkconnectortest123
+
+
+Step 5:
+---------
+Create public and private ec2 which will act as client machine for MSK Cluster
+
+
+Step 6:In EC2 Client Machine:
+-----------------------------
+sudo yum install java-1.8.0-openjdk
+wget https://archive.apache.org/dist/kafka/2.8.1/kafka_2.12-2.8.1.tgz
+tar -xvf kafka_2.12-2.8.1.tgz
+cd kafka_2.12-2.8.1
+
+
+bin/kafka-topics.sh --create --topic demotesting3 --bootstrap-server {} --replication-factor 1 --partitions 2
+
+Step 7:Create the connector
+-----------------------------
+Documentation Link:
+----------------------
+https://docs.lenses.io/5.0/integrations/connectors/stream-reactor/sinks/s3sinkconnector/
+
+
+
+connector.class=io.lenses.streamreactor.connect.aws.s3.sink.S3SinkConnector
+tasks.max=2
+topics=demotesting3
+connect.s3.vhost.bucket=true
+schema.enable=false
+key.converter.schemas.enable=false
+connect.s3.kcql=INSERT INTO irisseta:MSKBuildLabClusterdate SELECT * FROM demotesting3 PARTITIONBY _date.uuuu,_date.LL,_date.dd STOREAS `JSON` WITHPARTITIONER=Values    WITH_FLUSH_SIZE = 10000 WITH_FLUSH_INTERVAL = 300 WITH_FLUSH_COUNT = 20
+aws.region=us-east-1
+aws.custom.endpoint=https://s3.us-east-1.amazonaws.com/
+value.converter.schemas.enable=false
+connect.s3.aws.region=us-east-1
+value.converter=org.apache.kafka.connect.json.JsonConverter
+errors.log.enable=true
+key.converter=org.apache.kafka.connect.json.JsonConverter
+
+
+Step 8:Setup Snowflake Table ,Snowpipe and s3 event notifications
+------------------------------------------------------------------
+--drop database if exists
+drop database if exists s3_to_snowflake;
+
+--Database Creation 
+create database if not exists s3_to_snowflake;
+
+--Use the database
+use s3_to_snowflake;
+
+--create the external stage
+create or replace stage s3_to_snowflake.PUBLIC.Snow_stage url="s3://{}" 
+credentials=(aws_key_id=''
+aws_secret_key='');
+
+list @Snow_stage;
+
+create or replace table s3_to_snowflake.PUBLIC.real_time_demo(data variant);
+
+
+--Create the Pipe
+create or replace pipe s3_to_snowflake.PUBLIC.for_kafka_ingestion
+auto_ingest=true as copy into s3_to_snowflake.PUBLIC.real_time_demo from 
+@s3_to_snowflake.PUBLIC.Snow_stage FILE_FORMAT=(type = 'JSON');
+
+show pipes;
+
+
+
+
+Test:Start consumer in a new window 
+------------------------------------------
+
+cd kafka_2.12-2.8.1
+bin/kafka-console-consumer.sh --topic demotesting3 --bootstrap-server  b-1.kafkas3connectordemoyt.pvvnij.c3.kafka.us-east-1.amazonaws.com:9092,b-2.kafkas3connectordemoyt.pvvnij.c3.kafka.us-east-1.amazonaws.com:9092
+
+Produce messages:
+---------------------
+pip install kafka-python
+
+
+from time import sleep
+from json import dumps
+from kafka import KafkaProducer
+topic_name='demotesting3'
+producer = KafkaProducer(bootstrap_servers=['{}'],value_serializer=lambda x: dumps(x).encode('utf-8'))
+
+for e in range(1000):
+    data = {'number' : e}
+    print(data)
+    producer.send(topic_name, value=data)
+    sleep(0.2)
+	
+
+
+
+Observer partitioning :
+---------------------------
+bucket/prefix/customValue/topic(partition_offset)
+
+Download the data and observe the json
+
+Check in Snowflake
+------------------------
+
+
+select * from s3_to_snowflake.PUBLIC.real_time_demo;
+
+select count(*) from s3_to_snowflake.PUBLIC.real_time_demo;
+
+
+select parse_json(Data):number as value_part from  s3_to_snowflake.PUBLIC.real_time_demo order by value_part;
+
+
+
