@@ -1,0 +1,132 @@
+To create the partitioned data in s3 external stage:
+-------------------------------------------------------------
+copy into {externla stage}
+from 
+(select * from snowflake_sample_data.tpch_sf1.lineitem)
+partition by(split_part(l_shipdate,'-',1))
+FILE_FORMAT=my_csv_format
+HEADER=TRUE
+DETAILED_OUTPUT=TRUE;
+	  
+	  
+Code used in the demo:
+-------------------------
+ALTER SESSION SET USE_CACHED_RESULT = FALSE;
+
+--drop database if exists
+drop database if exists s3_to_snowflake;
+
+--Database Creation 
+create database if not exists s3_to_snowflake;
+
+--Use the database
+use s3_to_snowflake;
+
+--create the external stage
+create or replace stage s3_to_snowflake.PUBLIC.Snow_stage url="s3://irisseta/" 
+credentials=(aws_key_id=''
+aws_secret_key='');
+
+list @Snow_stage/unloadlineitem;
+
+
+--File Format Creation
+create or replace file format my_csv_format
+type = csv field_delimiter = ',' skip_header = 1
+field_optionally_enclosed_by = '"'
+null_if = ('NULL', 'null') 
+empty_field_as_null = true;
+
+
+
+create or replace external table s3_to_snowflake.PUBLIC.table_without_partition_for_yt_demo  (
+L_ORDERKEY number(38,0) as (Value:c1::int),
+L_PARTKEY NUMBER(38,0) as (Value:c2::int),
+L_SUPPKEY NUMBER(38,0) as (Value:c3::int),
+L_LINENUMBER NUMBER(38,0) as (Value:c4::int),
+L_QUANTITY NUMBER(12,2) as (Value:c5::number(12,2)),
+L_EXTENDEDPRICE NUMBER(12,2) as (Value:c6::number(12,2)),
+L_DISCOUNT NUMBER(12,2) as (Value:c7::number(12,2)),
+L_TAX NUMBER(12,2) as (Value:c8::number(12,2)),
+L_RETURNFLAG VARCHAR(1) as (Value:c9::varchar),
+L_LINESTATUS VARCHAR(1) as (Value:c10::varchar),
+L_SHIPDATE DATE as (Value:c11::DATE),
+L_COMMITDATE DATE as (Value:c12::DATE),
+L_RECEIPTDATE DATE as (Value:c13::DATE),
+L_SHIPINSTRUCT VARCHAR(25) as (Value:c14::varchar),
+L_SHIPMODE VARCHAR(10) as (Value:c15::varchar),
+L_COMMENT VARCHAR(44) as (Value:c16::varchar))  with 
+location =@s3_to_snowflake.PUBLIC.Snow_stage/unloadlineitem file_format ='my_csv_format';
+
+select * from s3_to_snowflake.PUBLIC.table_without_partition_for_yt_demo limit 10 ;
+
+
+
+select
+       l_returnflag,
+       l_linestatus,
+       sum(l_quantity) as sum_qty,
+       sum(l_extendedprice) as sum_base_price,
+       sum(l_extendedprice * (1-l_discount)) as sum_disc_price,
+       sum(l_extendedprice * (1-l_discount) * (1+l_tax)) as sum_charge,
+       avg(l_quantity) as avg_qty,
+       avg(l_extendedprice) as avg_price,
+       avg(l_discount) as avg_disc,
+       count(*) as count_order
+ from
+       s3_to_snowflake.PUBLIC.table_without_partition_for_yt_demo
+ where
+       cast(split_part(l_shipdate,'-',1) as int) >=1998
+       group by
+       l_returnflag,
+       l_linestatus
+ order by
+       l_returnflag,
+       l_linestatus;
+
+select METADATA$FILENAME as File_Name from @Snow_stage/unloadlineitem limit 10;
+
+select METADATA$FILENAME as File_Name,split_part(METADATA$FILENAME,'/',2) as Partition_Name from @Snow_stage/unloadlineitem limit 10;
+
+--Create partitioned Table
+create or replace external table s3_to_snowflake.PUBLIC.table_with_partition_for_yt_demo  (
+L_ORDERKEY number(38,0) as (Value:c1::int),
+L_PARTKEY NUMBER(38,0) as (Value:c2::int),
+L_SUPPKEY NUMBER(38,0) as (Value:c3::int),
+L_LINENUMBER NUMBER(38,0) as (Value:c4::int),
+L_QUANTITY NUMBER(12,2) as (Value:c5::number(12,2)),
+L_EXTENDEDPRICE NUMBER(12,2) as (Value:c6::number(12,2)),
+L_DISCOUNT NUMBER(12,2) as (Value:c7::number(12,2)),
+L_TAX NUMBER(12,2) as (Value:c8::number(12,2)),
+L_RETURNFLAG VARCHAR(1) as (Value:c9::varchar),
+L_LINESTATUS VARCHAR(1) as (Value:c10::varchar),
+L_SHIPDATE DATE as (Value:c11::DATE),
+L_COMMITDATE DATE as (Value:c12::DATE),
+L_RECEIPTDATE DATE as (Value:c13::DATE),
+L_SHIPINSTRUCT VARCHAR(25) as (Value:c14::varchar),
+L_SHIPMODE VARCHAR(10) as (Value:c15::varchar),
+L_COMMENT VARCHAR(44) as (Value:c16::varchar),File_Partition  NUMBER(38,0) as (split_part(METADATA$FILENAME,'/',2)::int)) PARTITION BY(File_Partition) with 
+location =@s3_to_snowflake.PUBLIC.Snow_stage/unloadlineitem file_format ='my_csv_format' ;
+
+
+select
+       l_returnflag,
+       l_linestatus,
+       sum(l_quantity) as sum_qty,
+       sum(l_extendedprice) as sum_base_price,
+       sum(l_extendedprice * (1-l_discount)) as sum_disc_price,
+       sum(l_extendedprice * (1-l_discount) * (1+l_tax)) as sum_charge,
+       avg(l_quantity) as avg_qty,
+       avg(l_extendedprice) as avg_price,
+       avg(l_discount) as avg_disc,
+       count(*) as count_order
+ from
+       s3_to_snowflake.PUBLIC.table_with_partition_for_yt_demo
+ where
+       File_Partition >=1998
+       group by
+       l_returnflag,
+       l_linestatus
+ order by
+       l_returnflag,
+       l_linestatus;
