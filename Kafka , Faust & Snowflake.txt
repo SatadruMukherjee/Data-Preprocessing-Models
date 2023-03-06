@@ -1,0 +1,212 @@
+Code:
+------------
+Lauch Kafka:
+-------------------
+F:/kafka_2.12-3.3.1/bin/windows/zookeeper-server-start.bat F:/kafka_2.12-3.3.1/config/zookeeper.properties
+
+F:/kafka_2.12-3.3.1/bin/windows/kafka-server-start.bat F:/kafka_2.12-3.3.1/config/server.properties
+
+
+
+F:/kafka_2.12-3.3.1/bin/windows/kafka-topics.bat --create --topic car_speed --bootstrap-server localhost:9092 --replication-factor 1 --partitions 3
+
+Producer:
+-------------
+from time import sleep
+from json import dumps
+from kafka import KafkaProducer
+import random
+import time
+
+
+topic_name='car_speed'
+
+def custom_partitioner(key, all_partitions, available):
+    """
+    Customer Kafka partitioner to get the partition corresponding to key
+    :param key: partitioning key
+    :param all_partitions: list of all partitions sorted by partition ID
+    :param available: list of available partitions in no particular order
+    :return: one of the values from all_partitions or available
+    """
+    print("The key is  : {}".format(key))
+    print("All partitions : {}".format(all_partitions))
+    print("After decoding of the key : {}".format(key.decode('UTF-8')))
+    return int(key.decode('UTF-8'))%len(all_partitions)
+
+
+producer = KafkaProducer(bootstrap_servers=['localhost:9092'],value_serializer=lambda x: dumps(x).encode('utf-8'),
+                         partitioner=custom_partitioner)
+
+car_list=["Honda","Ford","Tesla","Volvo"]
+car_speed=[10,20,40,100,90,65]
+
+for e in range(1000):
+    data={"car_id":e,"car_name":random.choice(car_list),"car_speed":random.choice(car_speed),"capture_time":int(time.time()) }
+    print("Inserting the data : ",data)
+    producer.send(topic_name, key=str(e).encode(), value=(data))
+    sleep(1)
+	
+	
+Consumer:
+-------------
+import faust
+import json
+import snowflake.connector as sf
+
+app = faust.App(
+    'consume_and_store',
+    broker='kafka://localhost:9092',
+    value_serializer='raw',
+)
+
+
+
+user=""
+password=""
+account=""
+conn=sf.connect(user=user,password=password,account=account,autocommit=False)
+
+
+cursor = conn.cursor()
+
+statement_1 = 'use warehouse COMPUTE_WH'
+cursor.execute(statement_1)
+statement2 = "alter warehouse COMPUTE_WH resume  IF SUSPENDED"
+cursor.execute(statement2)
+statement3 = "use database RAMU"
+cursor.execute(statement3)
+statement4 = "use role ACCOUNTADMIN"
+cursor.execute(statement4)
+statement5 = "use schema PUBLIC"
+cursor.execute(statement5)
+
+
+car_speed_topic = app.topic('car_speed')
+
+
+
+@app.agent(car_speed_topic)
+async def read_and_store(carspeed_stream_data):
+    async for data in carspeed_stream_data:
+        captured_event = json.loads(data)
+        cursor.execute("""
+        INSERT INTO car_speed_data (car_id, car_name,car_speed,capture_time) 
+        VALUES(%s,%s,%s,%s)""", (captured_event["car_id"], captured_event["car_name"],captured_event["car_speed"],
+                           captured_event["capture_time"]))
+        conn.commit()
+
+# Start the Faust App, which will block
+app.main()
+
+# close up the DB  connections on shutdown
+cursor.close()
+conn.close()
+
+
+
+Start instances:
+------------------
+faust -A main worker -l info
+faust -A main worker -l info --web-port=6067
+faust -A main worker -l info --web-port=6068
+
+
+To publish record one by one:
+--------------------------------------
+from time import sleep
+from json import dumps
+from kafka import KafkaProducer
+import random
+import time
+import json
+
+
+topic_name='car_speed'
+
+def custom_partitioner(key, all_partitions, available):
+    """
+    Customer Kafka partitioner to get the partition corresponding to key
+    :param key: partitioning key
+    :param all_partitions: list of all partitions sorted by partition ID
+    :param available: list of available partitions in no particular order
+    :return: one of the values from all_partitions or available
+    """
+    print("The key is  : {}".format(key))
+    print("All partitions : {}".format(all_partitions))
+    print("After decoding of the key : {}".format(key.decode('UTF-8')))
+    return int(key.decode('UTF-8'))%len(all_partitions)
+
+
+producer = KafkaProducer(bootstrap_servers=['localhost:9092'],value_serializer=lambda x: dumps(x).encode('utf-8'),
+                         partitioner=custom_partitioner)
+
+car_list=["Honda","Ford","Tesla","Volvo"]
+car_speed=[10,20,40,100,90,65]
+
+while True:
+    data=json.loads(input("Enter the data"))
+    print("Inserting the data : ",data)
+    print(type(data))
+    producer.send(topic_name, key=str(data['car_id']).encode(), value=(data))
+
+{"car_id": 2000, "car_name": "Honda", "car_speed": 2, "capture_time": 1678121028}
+{"car_id": 3000, "car_name": "Tesla", "car_speed": 2000, "capture_time": 1678121028}
+
+
+Snowflake Queries:
+-----------------------
+USE S3_TO_SNOWFLAKE.PUBLIC;
+
+--drop database if required
+drop database if exists ramu;
+--Create Database
+create database if not exists ramu;
+--use the database
+use ramu;
+
+create or replace table car_speed_data(car_id number,
+                     car_name varchar(20),
+                     car_speed number,
+                     capture_time number);
+
+                     
+select * from car_speed_data order by car_id;
+
+
+
+SELECT 
+MIN(CAR_SPEED) AS MIN_CAR_SPEED,
+MAX(CAR_SPEED) AS MAX_CAR_SPEED,
+AVG(CAR_SPEED) AS AVG_CAR_SPEED,
+STDDEV(CAR_SPEED) AS STDDEV_CAR_SPEED,
+COUNT(CAR_SPEED) AS COUNT_CAR_SPEED,
+TIME_SLICE(to_timestamp(capture_time),1,'MINUTES','START') AS TIMESTAMP_1START,
+TIME_SLICE(to_timestamp(capture_time),1,'MINUTES','END') AS TIMESTAMP_1END
+FROM car_speed_data where capture_time>date_part('epoch_second', DATEADD(Day ,-5, current_date))
+GROUP BY  TIMESTAMP_1START,TIMESTAMP_1END order by TIMESTAMP_1START ;
+
+
+
+
+SELECT 
+capture_time,
+TIME_SLICE(to_timestamp(capture_time),1,'MINUTES','START') AS TIMESTAMP_1START,
+TIME_SLICE(to_timestamp(capture_time),1,'MINUTES','END') AS TIMESTAMP_1END
+FROM car_speed_data where capture_time>date_part('epoch_second', DATEADD(Day ,-5, current_date));
+
+1678121028--2023-03-06 16:43:00.000,2023-03-06 16:44:00.000
+
+;
+
+
+SELECT 
+MIN(CAR_SPEED) AS MIN_CAR_SPEED,
+MAX(CAR_SPEED) AS MAX_CAR_SPEED,
+AVG(CAR_SPEED) AS AVG_CAR_SPEED,
+STDDEV(CAR_SPEED) AS STDDEV_CAR_SPEED,
+COUNT(CAR_SPEED) AS COUNT_CAR_SPEED,
+TIME_SLICE(to_timestamp(capture_time),1,'MINUTES','START') AS TIMESTAMP_1START,
+TIME_SLICE(to_timestamp(capture_time),1,'MINUTES','END') AS TIMESTAMP_1END
+FROM car_speed_data where capture_time>date_part('epoch_second',DATEADD(Day ,-5, current_date))
+GROUP BY  TIMESTAMP_1START,TIMESTAMP_1END having TIMESTAMP_1START ='2023-03-06 16:43:00.000' and TIMESTAMP_1END='2023-03-06 16:44:00.000' order by TIMESTAMP_1START;
