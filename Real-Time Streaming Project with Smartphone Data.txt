@@ -1,0 +1,115 @@
+Lauch Kafka:
+-------------------
+
+https://github.com/SatadruMukherjee/Data-Preprocessing-Models/blob/main/kafka_yt_demo.zip
+
+Lambda Code:
+----------------
+import json
+from time import sleep
+from json import dumps
+from kafka import KafkaProducer
+import json
+
+topic_name='sensor_data_consumer'
+producer = KafkaProducer(bootstrap_servers=['52.87.254.233:9092']
+,value_serializer=lambda x: dumps(x).encode('utf-8'))
+
+def lambda_handler(event, context):
+    # TODO implement
+    print(event)
+    payload_part=json.loads(event['body'])['payload']
+    for i in payload_part:
+        light_illumination=i['values']['lux']
+        capture_time=i['time']
+        data={"light_illumination":light_illumination,"capture_time":capture_time}
+        print(data)
+        producer.send(topic_name, value=data)
+    producer.flush()
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
+
+
+
+
+
+wget https://dlcdn.apache.org/kafka/3.4.0/kafka_2.13-3.4.0.tgz
+tar -xvf kafka_2.13-3.4.0.tgz
+
+
+To install Java --
+----------------------------------------
+java -version
+sudo yum install java-1.8.0-openjdk
+java -version
+cd kafka_2.13-3.4.0
+
+Start Zoo-keeper:
+-------------------------------
+bin/zookeeper-server-start.sh config/zookeeper.properties
+
+
+Start Kafka-server:
+----------------------------------------
+Duplicate the session & enter in a new console --
+export KAFKA_HEAP_OPTS="-Xmx256M -Xms128M"
+cd kafka_2.13-3.4.0
+bin/kafka-server-start.sh config/server.properties
+
+It is pointing to private server , change server.properties so that it can run in public IP 
+
+To do this , you can follow any of the 2 approaches shared belwo --
+1)Do a vi config/server.properties in insert mode -- change ADVERTISED_LISTENERS to public ip of the EC2 instance
+2)You can modify the file using Winscp also
+
+To create topic:
+------------------
+cd kafka_2.13-3.4.0
+bin/kafka-topics.sh --create --topic sensor_data_consumer --bootstrap-server 100.26.220.99:9092 --replication-factor 1 --partitions 1 
+
+Start Kafka Console Consumer:
+--------------------------------------
+bin/kafka-console-consumer.sh --topic sensor_data_consumer --bootstrap-server 100.26.220.99:9092
+
+Sample Json event received from API:
+---------------------------------------
+{
+   "version":"2.0",
+   "routeKey":"POST /publishtokafka",
+   "rawPath":"/publishtokafka",
+   "rawQueryString":"",
+   "headers":{
+      "accept-encoding":"gzip",
+      "content-length":"1141",
+      "content-type":"application/json",
+      "host":"szl0e9g8og.execute-api.us-east-1.amazonaws.com",
+      "user-agent":"okhttp/4.9.2",
+      "x-amzn-trace-id":"Root=1-641b2ce4-718735061957bb75192829c1",
+      "x-forwarded-for":"43.226.31.179",
+      "x-forwarded-port":"443",
+      "x-forwarded-proto":"https"
+   },
+   "requestContext":{
+      "accountId":"825865577047",
+      "apiId":"szl0e9g8og",
+      "domainName":"szl0e9g8og.execute-api.us-east-1.amazonaws.com",
+      "domainPrefix":"szl0e9g8og",
+      "http":{
+         "method":"POST",
+         "path":"/publishtokafka",
+         "protocol":"HTTP/1.1",
+         "sourceIp":"43.226.31.179",
+         "userAgent":"okhttp/4.9.2"
+      },
+      "requestId":"CMPzriYgoAMEJ1Q=",
+      "routeKey":"POST /publishtokafka",
+      "stage":"$default",
+      "time":"22/Mar/2023:16:29:24 +0000",
+      "timeEpoch":1679502564025
+   },
+   "body":"{\"messageId\":22,\"sessionId\":\"9dc9bf11-6301-477c-97a8-50cfc08c77d6\",\"deviceId\":\"a390a36d-eee4-466c-8287-3360165e351c\",\"payload\":[{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502563452012300},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502563552018200},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502563652024000},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502563752029700},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502563852004600},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502563952010800},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502564052016400},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502564152022300},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502564252028000},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502564352003000},{\"name\":\"light\",\"values\":{\"lux\":6.329113960266113},\"accuracy\":3,\"time\":1679502564452009000}]}",
+   "isBase64Encoded":false
+}
+
