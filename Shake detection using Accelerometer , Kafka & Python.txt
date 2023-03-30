@@ -1,0 +1,83 @@
+
+
+EC2 Code:
+------------
+wget https://dlcdn.apache.org/kafka/3.4.0/kafka_2.13-3.4.0.tgz
+tar -xvf kafka_2.13-3.4.0.tgz
+sudo yum install java-1.8.0-openjdk
+cd kafka_2.13-3.4.0
+bin/zookeeper-server-start.sh config/zookeeper.properties
+export KAFKA_HEAP_OPTS="-Xmx256M -Xms128M"
+cd kafka_2.13-3.4.0
+bin/kafka-server-start.sh config/server.properties
+To create topic:
+------------------
+cd kafka_2.13-3.4.0
+bin/kafka-topics.sh --create --topic sensor_data_consumer --bootstrap-server {}:9092 --replication-factor 1 --partitions 1 
+
+Start Kafka Console Consumer:
+--------------------------------------
+bin/kafka-console-consumer.sh --topic sensor_data_consumer --bootstrap-server {}:9092
+
+
+Lambda Code:
+----------------
+import json
+from time import sleep
+from json import dumps
+from kafka import KafkaProducer
+import json
+
+topic_name='sensor_data_consumer'
+producer = KafkaProducer(bootstrap_servers=['{}:9092']
+,value_serializer=lambda x: dumps(x).encode('utf-8'))
+
+def lambda_handler(event, context):
+    # TODO implement
+    print(event)
+    payload_part=json.loads(event['body'])['payload']
+    for i in payload_part:
+        acc_x=i['values']['x']
+        acc_y=i['values']['y']
+        acc_z=i['values']['z']
+        capture_time=i['time']
+        data={"acc_x":acc_x,"acc_y":acc_y,"acc_z":acc_z,"capture_time":capture_time}
+        print(data)
+        producer.send(topic_name, value=data)
+    producer.flush()
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
+   
+
+    
+    
+Consumer Code:
+----------------
+from kafka import KafkaConsumer
+from kafka import TopicPartition , OffsetAndMetadata
+import json
+
+
+consumer = KafkaConsumer ('sensor_data_consumer1',bootstrap_servers = ['{}:9092'],
+value_deserializer=lambda m: json.loads(m.decode('utf-8')),group_id='acceleration_test',auto_offset_reset='earliest',
+                          enable_auto_commit =False)
+
+
+for message in consumer:
+    data=message.value
+    x_accl=data['acc_x']
+    y_accl = data['acc_y']
+    z_accl = data['acc_z']
+    mag=(abs(x_accl)+abs(y_accl)+abs(z_accl))
+    if(mag>=15):
+        print('*' * 100)
+        print("Shaking")
+        print('*' * 100)
+    else:
+        print("Idle")
+    tp=TopicPartition(message.topic,message.partition)
+    om = OffsetAndMetadata(message.offset+1, message.timestamp)
+    consumer.commit({tp:om})
+	
