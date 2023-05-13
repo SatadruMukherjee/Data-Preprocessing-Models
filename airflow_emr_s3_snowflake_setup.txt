@@ -1,4 +1,4 @@
-databricks--s3 file--csv--emr launch--spark parquet--emr waits--once done--talend--snowflake
+
 
 sudo apt update
 sudo apt install -y python3-pip
