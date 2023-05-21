@@ -1,0 +1,189 @@
+Execute below Snowflake Queries:
+------------------------------------------------
+drop database if exists s3_to_snowflake;
+
+use role accountadmin;
+--Database Creation 
+create database if not exists s3_to_snowflake;
+
+--Specify the active/current database for the session.
+use s3_to_snowflake;
+
+
+
+
+create or replace stage s3_to_snowflake.PUBLIC.snow_simple url="s3://{}/{}/" 
+credentials=(aws_key_id=''
+aws_secret_key='');
+
+
+
+list @s3_to_snowflake.PUBLIC.snow_simple;
+
+--File Format Creation
+create or replace file format my_csv_format
+type = csv field_delimiter = ',' skip_header = 1
+field_optionally_enclosed_by = '"'
+null_if = ('NULL', 'null') 
+empty_field_as_null = true;
+
+list @s3_to_snowflake.PUBLIC.snow_simple;
+
+--Table Creation
+create or replace external table s3_to_snowflake.PUBLIC.Iris_dataset  (Id number(10,0) as (Value:c1::int),sepal_length number(10,5) as  (Value:c2::number(10,5)),
+sepal_width number(10,4) as (Value:c3::number(10,4)),petal_length number(10,3) as (Value:c4::number(10,3)), 
+petal_width number(10,4) as (Value:c5::number(10,4)), CLASS_NAME varchar(20) as (Value:c6::varchar)) with location = @s3_to_snowflake.PUBLIC.snow_simple
+file_format ='my_csv_format';
+
+
+
+
+select * from s3_to_snowflake.PUBLIC.Iris_dataset;
+
+select distinct class_name  from s3_to_snowflake.PUBLIC.Iris_dataset;
+
+
+Airflow Setup:
+---------------
+
+sudo apt update
+sudo apt install -y python3-pip
+sudo apt install -y sqlite3
+sudo apt-get install -y libpq-dev
+pip3 install --upgrade awscli
+pip3 install boto3
+sudo pip3 install virtualenv 
+virtualenv venv 
+source venv/bin/activate
+pip install "apache-airflow[postgres]==2.5.0" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.5.0/constraints-3.7.txt"
+pip install pandas apache-airflow-providers-snowflake==2.1.0 snowflake-connector-python==2.5.1 snowflake-sqlalchemy==1.2.5
+airflow db init
+sudo apt-get install postgresql postgresql-contrib
+sudo -i -u postgres
+psql
+CREATE DATABASE airflow;
+CREATE USER airflow WITH PASSWORD 'airflow';
+GRANT ALL PRIVILEGES ON DATABASE airflow TO airflow;
+exit
+exit
+ls
+cd airflow
+sed -i 's#sqlite:////home/ubuntu/airflow/airflow.db#postgresql+psycopg2://airflow:airflow@localhost/airflow#g' airflow.cfg
+sed -i 's#SequentialExecutor#LocalExecutor#g' airflow.cfg
+airflow db init
+airflow users create -u airflow -f airflow -l airflow -r Admin -e airflow1@gmail.com
+User id --airflow
+password--admin@123! 
+mkdir /home/ubuntu/dags
+cd airflow
+vi airflow.cfg
+change the below properties --
+dags_folder = /home/ubuntu/dags
+load_examples = False
+
+
+
+
+airflow db init
+airflow webserver
+
+source venv/bin/activate
+airflow scheduler
+
+Create snowflake connection
+
+Test it out
+
+
+file change:
+--------------
+auth_backends = airflow.api.auth.backend.basic_auth
+access_control_allow_headers = origin, content-type, accept
+access_control_allow_methods = POST, GET, OPTIONS, DELETE
+access_control_allow_origins = http://{EC2 Public IP}:8080/
+
+
+Config:
+---------
+http://{EC2 Public IP}:8080/api/v1/dags/snowflake_automation_dag/dagRuns
+
+Body:
+--------
+{
+    "dag_run_id":"{Put unique ID here}"
+}
+
+Header:
+----------
+Content-type: application/json
+Accept: application/json
+
+Authorization:
+---------------
+Username:{Put the Airflow Username}
+Password:{Put the Airflow Password}
+
+Test with post request
+
+Deploy in Lambda & test
+
+Airflow Code:
+------------------------
+import logging
+import airflow
+from airflow import DAG
+from airflow.operators.python_operator import PythonOperator
+from airflow.contrib.operators.snowflake_operator import SnowflakeOperator
+from airflow.contrib.hooks.snowflake_hook import SnowflakeHook
+from datetime import datetime, timedelta
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+args = {"owner": "Airflow", "start_date": airflow.utils.dates.days_ago(2)}
+
+dag = DAG(
+    dag_id="snowflake_automation_dag", default_args=args, schedule_interval=None
+)
+
+snowflake_query = [
+			"""ALTER EXTERNAL TABLE s3_to_snowflake.PUBLIC.Iris_dataset REFRESH"""
+]
+
+
+
+with dag:
+
+	external_table_refresh = SnowflakeOperator(
+		task_id="external_table_refresh",
+		sql=snowflake_query[0] ,
+		snowflake_conn_id="snowflake_conn"
+	)
+
+
+external_table_refresh
+
+Lambda Code:
+----------------------
+import requests
+from requests.auth import HTTPBasicAuth
+import datetime
+import json
+
+headers = {
+			'Accept': 'application/json',
+			'Content-Type': 'application/json'
+		  }
+
+def lambda_handler(event, context):
+    # TODO implement
+    payload=json.dumps({'dag_run_id': 'lambda_run_' + datetime.datetime.utcnow().isoformat()})
+    response = requests.post('http://{EC2 Public IP}:8080/api/v1/dags/snowflake_automation_dag/dagRuns',
+    auth=HTTPBasicAuth('airflow', 'admin@123!'),headers=headers,
+    data = payload)
+    print(response.text)
+    return {
+    'statusCode': 200,
+    'body': json.dumps('Hello from Lambda!')
+    }
