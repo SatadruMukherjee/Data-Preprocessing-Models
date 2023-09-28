@@ -1,0 +1,131 @@
+DynamoDB Table:
+------------------
+DD_JobExecLog
+
+PK --JobName 
+SK--JobRunID 
+
+Glue Job:
+------------
+import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+
+
+def main():
+    ## @params: [JOB_NAME]
+    args = getResolvedOptions(sys.argv, ["VAL1","VAL2"])
+    file_name=args['VAL1']
+    bucket_name=args['VAL2']
+    print("Bucket Name" , bucket_name)
+    print("File Name" , file_name)
+    input_file_path="s3a://{}/{}".format(bucket_name,file_name)
+    print("Input File Path : ",input_file_path);
+    df = spark.read.csv(input_file_path, header = True)
+    df.repartition(1).write.mode('overwrite').parquet("s3a://{target_bucket}/{}".format(file_name.split('.')[0]))
+
+main()
+
+Trigger Lambda:
+-----------------
+from datetime import datetime, timedelta
+import json
+import boto3
+client = boto3.client('glue')
+dd = boto3.resource('dynamodb')
+table = dd.Table('DD_JobExecLog')
+
+start_timestamp = str(datetime.now())
+glue_job_name="yt_csv_to_parquet"
+def lambda_handler(event, context):
+    for record in event['Records']:
+        file_name = record['s3']['object']['key']
+        bucketName=record['s3']['bucket']['name']
+        print("File Name : ",file_name)
+        print("Bucket Name : ",bucketName)
+        fullS3Path = "s3://" + bucketName + "/" + file_name
+        glue=boto3.client('glue');
+        response = glue.start_job_run(JobName = glue_job_name, Arguments={"--VAL1":file_name,"--VAL2":bucketName})
+        print(response)
+        # Converting "response" from Type dict to string
+        string_response = json.dumps(response)
+        # Parsing JSON response from Glue API
+        parsed_response = json.loads(string_response)
+        ###########################
+        #
+        #  
+        table.put_item(
+           Item={
+                'JobName': glue_job_name,
+                'JobRunID': parsed_response['JobRunId'],
+                'job_state': 'STARTED (Lambda)',
+                'start_timestamp': start_timestamp,
+                'update_timestamp': 'null',
+                'job_message': 'Job Triggered by Lambda',
+                'job_severity': 'null',
+                's3_file_key': fullS3Path,
+                'job_region': 'null',
+                'job_time': 'null',
+                'job_account': 'null',
+                'glue_metadata': parsed_response
+            }
+        )
+		
+		
+
+Update Lambda:
+------------------
+from datetime import datetime, timedelta
+import json
+import boto3
+dd = boto3.resource('dynamodb')
+table = dd.Table('DD_JobExecLog')
+
+def lambda_handler(event, context):
+    print("Event",event)
+    jobName = event['detail']['jobName']
+    jobRunId = event['detail']['jobRunId']
+    job_time = event['time']
+    j_account = event['account']
+    j_region = event['region']
+    j_severity = event['detail']['severity']
+    j_state = event['detail']['state']
+    j_message = event['detail']['message']
+    update_timestamp = str(datetime.now())
+#
+    if jobName == "yt_csv_to_parquet": 
+        table.update_item(
+            Key={
+                'JobName': jobName,
+                'JobRunID': jobRunId
+            },
+            UpdateExpression='SET job_message= :msg, job_severity= :sev, update_timestamp = :upd_ts, job_time= :jb_tm, job_region= :j_region, job_state= :v_state, job_account= :acc ',
+            ExpressionAttributeValues={
+                ':upd_ts': update_timestamp,
+                ':jb_tm': job_time,
+                ':j_region': j_region,
+                ':sev':  j_severity,
+                ':v_state': j_state,
+                ':msg': j_message,
+                ':acc': j_account
+            }
+        )
+#
+
+Cloudwatch Rule:
+------------------
+{
+   "source": ["aws.glue"],
+   "detail-type": 
+    [
+        "Glue Job State Change",
+        "Glue Job Run Status"
+    ]
+}
