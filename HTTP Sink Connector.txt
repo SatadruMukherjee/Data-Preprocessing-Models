@@ -1,0 +1,61 @@
+Start Zookeeper:
+---------------------
+F:/kafka_2.12-3.3.1/bin/windows/zookeeper-server-start.bat F:/kafka_2.12-3.3.1/config/zookeeper.properties
+
+Start Kafka Server:
+---------------------
+F:/kafka_2.12-3.3.1/bin/windows/kafka-server-start.bat F:/kafka_2.12-3.3.1/config/server.properties
+
+Create Source Topic:
+---------------------
+F:/kafka_2.12-3.3.1/bin/windows/kafka-topics.bat --create --topic http-messages --bootstrap-server localhost:9092 --replication-factor 1 --partitions 1
+
+http_config.properties:
+-------------------------
+name=HttpSinkBasicAuth
+topics=http-messages
+tasks.max=1
+connector.class=io.confluent.connect.http.HttpSinkConnector
+# key/val converters
+key.converter=org.apache.kafka.connect.storage.StringConverter
+value.converter=org.apache.kafka.connect.storage.StringConverter
+# licensing for local single-node Kafka cluster
+confluent.topic.bootstrap.servers=localhost:9092
+confluent.topic.replication.factor=1
+# connect reporter required bootstrap server
+reporter.bootstrap.servers=localhost:9092
+reporter.result.topic.name=success-responses
+reporter.result.topic.replication.factor=1
+behavior.on.error=log
+reporter.error.topic.name=error-responses
+reporter.error.topic.replication.factor=1
+# http sink connector configs
+http.api.url=https://api.mailjet.com/v3.1/send
+auth.type=BASIC
+connection.user={}
+connection.password={}
+
+Start HTTP Sink Connector:
+------------------------------
+F:/kafka_2.12-3.3.1/bin/windows/connect-standalone.bat F:/kafka_2.12-3.3.1/config/connect-standalone.properties F:/kafka_2.12-3.3.1/config/http_config.properties
+
+Start Console Producer to Source Topic:
+--------------------------------------------
+F:/kafka_2.12-3.3.1/bin/windows/kafka-console-producer.bat --topic http-messages  --bootstrap-server localhost:9092
+
+Start Console Consumer to Source Topic:
+--------------------------------------------
+F:/kafka_2.12-3.3.1/bin/windows/kafka-console-consumer.bat --topic http-messages --from-beginning --bootstrap-server localhost:9092
+
+Start Console Consumer to Response Topic:
+--------------------------------------------
+F:/kafka_2.12-3.3.1/bin/windows/kafka-console-consumer.bat --topic success-responses --from-beginning --bootstrap-server localhost:9092
+
+Start Console Consumer to Error Topic:
+--------------------------------------------
+F:/kafka_2.12-3.3.1/bin/windows/kafka-console-consumer.bat --topic error-responses --from-beginning --bootstrap-server localhost:9092
+
+
+Smaple Message:
+-----------------
+{"Messages":[{"From":{"Email":"{}","Name":"{}"},"To":[{"Email":"{}","Name":"{}"}],"Subject":"My first Marketing email","TextPart":"Greetings from Knowledge Amplifier. to viewer 1","HTMLPart":"<h3>Dear Viewer 1, welcome to <a href=https://www.youtube.com/@KnowledgeAmplifier1/videos>Knowledge Amplifier</a>!</h3><br />Subscribe our channel for more intresting videos!","CustomID":"AppGettingStartedTest"}]}
