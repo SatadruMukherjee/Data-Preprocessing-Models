@@ -1,0 +1,117 @@
+ec2:t2.2xlarge(linux)
+
+Download Kafka:
+---------------------
+wget https://downloads.apache.org/kafka/3.6.0/kafka_2.12-3.6.0.tgz
+tar -xvf kafka_2.12-3.6.0.tgz
+
+Download Java:
+---------------------
+java -version
+sudo yum -y install java-1.8.0-openjdk
+java -version
+
+vi kafka_2.12-3.6.0/config/server.properties
+
+Download Connector Plugin:
+-----------------------------
+wget https://github.com/castorm/kafka-connect-http/releases/download/v0.8.11/kafka-connect-http-0.8.11-plugin.tar.gz
+tar -xvf kafka-connect-http-0.8.11-plugin.tar.gz
+
+
+cp /home/ec2-user/kafka-connect-http/* /home/ec2-user/kafka_2.12-3.6.0/libs
+
+wget https://repo1.maven.org/maven2/com/snowflake/snowflake-kafka-connector/1.5.0/snowflake-kafka-connector-1.5.0.jar
+cp /home/ec2-user/snowflake-kafka-connector-1.5.0.jar /home/ec2-user/kafka_2.12-3.6.0/libs
+
+Edit Connector Standalone properties:
+---------------------------------------------
+vi /home/ec2-user/kafka_2.12-3.6.0/config/connect-standalone.properties
+
+Bootstrap server --
+Plugin path --/home/ec2-user/kafka_2.12-3.6.0/libs
+
+cp /home/ec2-user/kafka_2.12-3.6.0/config/connect-standalone.properties /home/ec2-user/kafka_2.12-3.6.0/config/connect-standalone2.properties
+vi /home/ec2-user/kafka_2.12-3.6.0/config/connect-standalone2.properties
+listeners=http://0.0.0.0:8084
+
+Edit Rest Connector properties:
+---------------------------------------------
+vi /home/ec2-user/kafka_2.12-3.6.0/config/rest-source-connector.properties
+tasks.max: 1
+http.request.url: https://api.coinbase.com/v2/prices/btc-usd/spot
+http.request.headers: Content-Type:application/json,Accept:application/json
+http.auth.type: Basic
+http.auth.user:
+http.auth.password:
+http.timer.interval.millis: 10000
+http.timer.catchup.interval.millis: 1000
+kafka.topic: hello_world
+key.converter = org.apache.kafka.connect.json.JsonConverter
+value.converter = org.apache.kafka.connect.json.JsonConverter
+connector.class = com.github.castorm.kafka.connect.http.HttpSourceConnector
+name=rest-source
+
+Create Private & Public key-pair:
+--------------------------------------------------------------
+openssl genrsa -out rsa_key.pem 2048
+openssl rsa -in rsa_key.pem -pubout -out rsa_key.pub
+
+cat rsa_key.pem
+
+cat rsa_key.pub
+
+
+Edit Snowflake Connector properties:
+---------------------------------------------
+vi /home/ec2-user/kafka_2.12-3.6.0/config/SF_connect.properties
+
+connector.class=com.snowflake.kafka.connector.SnowflakeSinkConnector
+tasks.max=8
+topics=hello_world
+snowflake.topic2table.map=hello_world:bitcoin_price_yt
+buffer.count.records=10
+buffer.flush.time=60
+buffer.size.bytes=500
+snowflake.url.name=
+snowflake.user.name=Satadru
+snowflake.private.key=
+snowflake.database.name=RAMU
+snowflake.schema.name=Public
+key.converter=org.apache.kafka.connect.json.JsonConverter
+value.converter=org.apache.kafka.connect.json.JsonConverter
+name=snowflake_connector_bitcoin_yt
+
+Start Zoo-keeper:
+-------------------------------
+cd kafka_2.12-3.6.0
+bin/zookeeper-server-start.sh config/zookeeper.properties
+
+Start Kafka-server:
+----------------------------------------
+cd kafka_2.12-3.6.0
+bin/kafka-server-start.sh config/server.properties
+
+Create Topic:
+----------------
+cd kafka_2.12-3.6.0
+bin/kafka-topics.sh --create --topic hello_world --bootstrap-server {}:9092 --replication-factor 1 --partitions 1
+
+
+Start Consumer:
+-------------------------
+bin/kafka-console-consumer.sh --topic hello_world --bootstrap-server {}:9092
+
+
+
+Start Source Kafka Connect:
+------------------------------
+cd kafka_2.12-3.6.0
+bin/connect-standalone.sh config/connect-standalone.properties config/rest-source-connector.properties
+
+Start Sink Kafka Connect:
+------------------------------
+cd kafka_2.12-3.6.0
+bin/connect-standalone.sh config/connect-standalone2.properties config/SF_connect.properties
+
+
