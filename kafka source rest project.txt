@@ -74,7 +74,7 @@ buffer.count.records=10
 buffer.flush.time=60
 buffer.size.bytes=500
 snowflake.url.name=
-snowflake.user.name=Satadru
+snowflake.user.name={username}
 snowflake.private.key=
 snowflake.database.name=RAMU
 snowflake.schema.name=Public
@@ -113,5 +113,36 @@ Start Sink Kafka Connect:
 ------------------------------
 cd kafka_2.12-3.6.0
 bin/connect-standalone.sh config/connect-standalone2.properties config/SF_connect.properties
+
+
+Snowflake Queries:
+----------------------
+drop database if exists ramu;
+
+create database ramu;
+
+alter user {username} set rsa_public_key='';
+
+desc user {username};
+
+
+select * from ramu.public.bitcoin_price_yt;
+
+select (RECORD_CONTENT:timestamp)::varchar::timestamp_ntz as time,trim(parse_json(RECORD_CONTENT:value):data:amount,'"') as amount from ramu.public.bitcoin_price_yt
+order by RECORD_CONTENT:timestamp;
+
+drop DYNAMIC table if exists ramu.public.flattened_bitcoin_price_yt_1;
+
+CREATE OR REPLACE DYNAMIC TABLE ramu.public.flattened_bitcoin_price_yt_1
+ TARGET_LAG = '1 minutes'
+  WAREHOUSE = COMPUTE_WH
+  AS
+select (RECORD_CONTENT:timestamp)::varchar::timestamp_ntz as time,trim(parse_json(RECORD_CONTENT:value):data:amount,'"') as amount from ramu.public.bitcoin_price_yt;
+
+select * from  ramu.public.flattened_bitcoin_price_yt_1;
+
+select * from ramu.public.bitcoin_price_yt;
+
+alter user {username} unset rsa_public_key;
 
 
