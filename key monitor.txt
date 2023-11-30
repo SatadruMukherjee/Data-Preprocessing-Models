@@ -1,0 +1,19 @@
+import json
+import boto3
+import datetime
+from datetime import datetime,timedelta
+from dateutil import tz
+
+def lambda_handler(event, context):
+    client=boto3.client('iam')
+    time_utc=datetime.now(tz.tzutc())
+    response=client.list_users();
+    print("List of users : ",response)
+    for user in response['Users']:
+        print("Access keys for user : {}".format(user['UserName']))
+        access_key_info=client.list_access_keys(UserName=user['UserName'])
+        print(access_key_info)
+        access_key_metadata=access_key_info['AccessKeyMetadata']
+        for key in access_key_metadata:
+            if(key['CreateDate']<(time_utc-timedelta(days=90))):
+                print("Alert!!")
