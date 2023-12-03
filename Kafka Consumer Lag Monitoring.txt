@@ -1,0 +1,120 @@
+Download Kafka:
+---------------------
+wget https://downloads.apache.org/kafka/3.6.0/kafka_2.12-3.6.0.tgz
+tar -xvf kafka_2.12-3.6.0.tgz
+
+Download Java:
+---------------------
+java -version
+sudo yum -y install java-1.8.0-openjdk
+java -version
+
+vi kafka_2.12-3.6.0/config/server.properties
+
+Start Zookepper:
+-----------------
+cd kafka_2.12-3.6.0
+bin/zookeeper-server-start.sh config/zookeeper.properties
+
+Start Kafka-server:
+----------------------------------------
+export KAFKA_HEAP_OPTS="-Xmx256M -Xms128M"
+
+cd kafka_2.12-3.6.0
+bin/kafka-server-start.sh config/server.properties
+
+Create Topic:
+----------------
+cd kafka_2.12-3.6.0
+bin/kafka-topics.sh --create --topic hello_world2 --bootstrap-server {}:9092 --replication-factor 1 --partitions 3
+
+
+Shell Script to monitor Consumer Lag:
+-----------------------------------------
+bin/kafka-consumer-groups.sh --bootstrap-server {}:9092 --group hello_world1 --describe
+
+
+Producer Code:
+--------------
+from time import sleep
+from json import dumps
+from kafka import KafkaProducer
+
+topic_name='{}'
+kafka_server='{}'
+def custom_partitioner(key, all_partitions, available):
+    """
+    Customer Kafka partitioner to get the partition corresponding to key
+    :param key: partitioning key
+    :param all_partitions: list of all partitions sorted by partition ID
+    :param available: list of available partitions in no particular order
+    :return: one of the values from all_partitions or available
+    """
+    print("The key is  : {}".format(key))
+    print("All partitions : {}".format(all_partitions))
+    print("After decoding of the key : {}".format(key.decode('UTF-8')))
+    return int(key.decode('UTF-8'))%len(all_partitions)
+
+
+producer = KafkaProducer(bootstrap_servers=[kafka_server],value_serializer=lambda x: dumps(x).encode('utf-8'),
+                         partitioner=custom_partitioner)
+
+for e in range(1000):
+    data = {'number' : e}
+    print(data)
+    producer.send(topic_name, key=str(e).encode(),value=data)
+    sleep(0.4)
+
+Consumer Code:
+--------------
+from kafka import KafkaConsumer
+from kafka import TopicPartition , OffsetAndMetadata
+from time import sleep
+import json
+
+topic='{}'
+group_id=topic
+kafka_server='{}'
+consumer = KafkaConsumer (topic,bootstrap_servers = [kafka_server],
+value_deserializer=lambda m: json.loads(m.decode('utf-8')),group_id=group_id,auto_offset_reset='earliest',
+                          enable_auto_commit =False)
+
+
+for message in consumer:
+    print(message)
+    tp = TopicPartition(message.topic, message.partition)
+    om = OffsetAndMetadata(message.offset + 1, message.timestamp)
+    consumer.commit({tp: om})
+    sleep(0.4)
+
+Log Monitor:
+-------------
+from kafka import KafkaConsumer
+from kafka import TopicPartition , OffsetAndMetadata
+from time import sleep
+import json
+
+topic='{}'
+group_id=topic
+kafka_server='{}'
+consumer = KafkaConsumer (topic,bootstrap_servers = [kafka_server],group_id=group_id)
+
+partitions=consumer.partitions_for_topic(topic)
+print(partitions)
+
+"***********************************************************************************************"
+#
+tp = [TopicPartition(topic, partition) for partition in partitions]
+
+topic_partition_last_offset = consumer.end_offsets(tp)
+print(topic_partition_last_offset)
+
+# "***********************************************************************************************"
+#
+#
+for i in tp:
+    consumer_committed_offset=0 if consumer.committed(i) is None else consumer.committed(i)
+    last_offset_stored_by_broker_in_partition=topic_partition_last_offset[i]
+    lag=last_offset_stored_by_broker_in_partition-consumer_committed_offset
+    print(f"Topic: {topic} - Partition: {i.partition} - Current Consumer Offset: {consumer_committed_offset} -  Last Offset: {last_offset_stored_by_broker_in_partition} - Lag : {lag}")
+print('*'*100)
