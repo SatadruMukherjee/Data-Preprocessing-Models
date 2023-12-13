@@ -1,0 +1,301 @@
+https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2204-Readme.md
+
+
+Step 1: Create a repo
+
+Upload some files
+
+Pattern:
+---------
+name: name of workflow
+on: [push]
+jobs:
+  job name or id:
+    runs-on: machine where job will run
+    steps:
+      - name: Name of the step
+        run:  Bash Command
+	
+Example 1:
+---------	
+name: my_first_github_action
+on: [push]
+jobs:
+  run-shell-commands:
+    runs-on: ubuntu-latest
+    steps:
+      - name: echo a string
+        run: echo "Hello"
+		
+		
+		
+		
+AWS Connection: AWS CLI installed by default
+---------------------------------------------
+name: second_github_action
+on: [push]
+jobs:
+  aws_cp:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: 
+          aws-secret-access-key: 
+          aws-region: 
+      - name: Upload to s3
+        run: aws s3 cp ./Capture2.PNG s3://githubactionytdemotest
+	  
+	  
+name: second_github_action
+on: [push]
+jobs:
+  aws_cp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: 
+          aws-secret-access-key: 
+          aws-region: us-east-1
+      - name: Upload to s3
+        run: aws s3 cp ./Capture2.PNG s3://githubactionytdemotest
+		
+		
+Lambda Deployment Zip Creation:
+--------------------------------
+Lambda Code:
+--------------
+import snowflake.connector as sf
+import os
+
+def run_query(conn, query):
+    cursor = conn.cursor()
+    cursor.execute(query)
+    cursor.close()
+
+def lambda_handler(event, context):
+    user=os.environ['user']
+    password=os.environ['password']
+    account=os.environ['account']
+    database="RAMU"
+    warehouse="COMPUTE_WH"
+    schema="PUBLIC"
+    role="ACCOUNTADMIN"
+    conn=sf.connect(user=user,password=password,account=account);
+
+
+    statement_1='use warehouse '+warehouse;
+    statement3="use database "+database;
+    statement4="use role "+role;
+    run_query(conn,statement_1)
+    run_query(conn,statement3)
+    run_query(conn,statement4)
+    sql_query_table_creation = "CREATE  TABLE if not exists test_table123(col1 integer, col2 string,col3 timestamp default current_timestamp())"
+    run_query(conn, sql_query_table_creation);
+    sql_query_data_ingestion="INSERT INTO test_table123(col1, col2) VALUES    (123, 'test string1'), (456, 'test string2')"
+    run_query(conn, sql_query_data_ingestion);
+
+Github Action Code:
+-----------------------
+Reference Link: https://quickstarts.snowflake.com/guide/devops_dcm_schemachange_github/index.html#5
+
+name: lambda_zip_test
+on: [push]
+jobs:
+  lambda_demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: 
+          aws-secret-access-key:
+          aws-region: us-east-1
+      -  name: Creating deployment zip
+         run: |
+          sudo apt install zip
+          mkdir -p ./deployment_zip 
+          pip install snowflake-connector-python --platform manylinux2010_x86_64 --only-binary=:all: -t ./deployment_zip
+          cp ./lambda_function.py  ./deployment_zip
+          cd deployment_zip 
+          zip -r lambda_zip.zip *
+      - name: lambda_code_update
+        run: |
+          aws lambda update-function-code --function-name lambda_deployment_via_gitaction --zip-file fileb://./deployment_zip/lambda_zip.zip
+
+
+
+Snowflake with GitHub Actions:
+---------------------------------
+CREATE  TABLE if not exists demoytcicd.public.test_table123(col1 integer, col2 string,col3 timestamp default current_timestamp());
+INSERT INTO demoytcicd.public.test_table123(col1, col2) VALUES    (123, 'test string1'), (456, 'test string2');
+
+
+--create the file format
+create or replace file format demoytcicd.public.my_csv_format
+type = csv field_delimiter = ',' skip_header = 1
+field_optionally_enclosed_by = '"'
+null_if = ('NULL', 'null') 
+empty_field_as_null = true;
+
+--create the external stage
+create or replace stage demoytcicd.public.Snow_stage url="s3://{}/" 
+credentials=(aws_key_id=''
+aws_secret_key='')
+file_format = my_csv_format;
+
+copy into demoytcicd.public.sample_test from 
+@ramu.PUBLIC.Snow_stage FILE_FORMAT=(FORMAT_NAME=my_csv_format);
+
+
+
+Github Action Code:
+-----------------------
+
+name: cicd_demoyt_snwoflake
+
+# Controls when the action will run. 
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'migrations/**'
+
+
+jobs:
+  deploy-snowflake-changes-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Run schemachange
+        env:
+          SF_ACCOUNT: ${{ secrets.SF_ACCOUNT }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_ROLE: ${{ secrets.SF_ROLE }}
+          SF_WAREHOUSE: ${{ secrets.SF_WAREHOUSE }}
+          SF_DATABASE: ${{ secrets.SF_DATABASE }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SF_PASSWORD }}
+        run: |
+          echo "Step 1: Installing schemachange"
+          pip install schemachange
+          
+          echo "Step 2: Running schemachange"
+          schemachange -f ./migrations -a $SF_ACCOUNT -u $SF_USERNAME -r $SF_ROLE -w $SF_WAREHOUSE -d $SF_DATABASE -c $SF_DATABASE.SCHEMACHANGE.CHANGE_HISTORY --create-change-history-table
+
+
+
+CI/CD with Github action and AWS EC2(Ubuntu Machine):
+-------------------------------------------------------
+
+sudo apt update
+sudo apt install git
+git --version
+git config --global user.name "Ramu"
+git config --global user.email "{}"
+ssh-keygen -t rsa -b 4096 -C "{}"
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_rsa
+cat ~/.ssh/id_rsa.pub
+
+mkdir github_code_base
+git clone git@github.com:SatadruMukherjee/demogithubactionyttest.git /home/ubuntu/github_code_base
+cd /home/ubuntu/github_code_base
+ls -lrt
+
+Github Action Code:
+------------------------
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.5.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Add EC2 host to known hosts
+      run: ssh-keyscan -H 54.172.86.2 >> ~/.ssh/known_hosts
+
+    - name: Deploy to EC2
+      run: |
+        # Replace the following with your deployment script or commands
+        ssh ubuntu@54.172.86.2 "cd /home/ubuntu/github_code_base && git pull origin main"
+
+		  
+		  
+		  
+AWS Glue Job:
+----------------
+PySpark Code:
+----------------
+import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+
+
+def main():
+    ## @params: [JOB_NAME]
+    df = spark.read.csv('s3://trset/Setosa.csv', header = True)
+    df.repartition(1).write.mode('append').parquet("s3a://{}/github_action/publish/")
+
+main()
+
+
+Github Action Code:
+------------------------
+name: glue_deployment
+on: [push]
+jobs:
+  aws_cp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: 
+          aws-secret-access-key:
+          aws-region: us-east-1
+      - name: Upload the Glue code to s3
+        run: |
+          aws s3 cp ./csv_to_parquet.py s3://{}/scripts/
+		  
+		  
+		  
+
+
+
+		  
+		
+
+
+
+		  
