@@ -1,0 +1,89 @@
+--drop database if exists
+drop database if exists s3_to_snowflake;
+
+--Database Creation 
+create database if not exists s3_to_snowflake;
+
+--Use the database
+use s3_to_snowflake;
+
+
+--create the external stage
+create or replace stage s3_to_snowflake.PUBLIC.Snow_stage url="{s3 location}" 
+credentials=(aws_key_id='{AWS Access Key}'
+aws_secret_key='{AWS Secret Key}');
+
+
+list @s3_to_snowflake.PUBLIC.Snow_stage;
+
+
+CREATE OR REPLACE PROCEDURE count_no_of_pages_sp(file_name string)
+  RETURNS integer
+  LANGUAGE PYTHON
+  RUNTIME_VERSION = '3.8'
+  PACKAGES = ('snowflake-snowpark-python','PyPDF2')
+  HANDLER = 'main_fn'
+AS
+$$
+from snowflake.snowpark.files import SnowflakeFile
+import PyPDF2
+def main_fn(session,file_name):
+    f=SnowflakeFile.open(file_name,'rb')
+    pdf_object=PyPDF2.PdfReader(f);
+    return len(pdf_object.pages)
+$$;
+
+call count_no_of_pages_sp(BUILD_SCOPED_FILE_URL( @s3_to_snowflake.PUBLIC.Snow_stage , 'crm_system.pdf' ));
+
+--select BUILD_SCOPED_FILE_URL( @s3_to_snowflake.PUBLIC.Snow_stage , 'upgrades-white-paper-final.pdf' );
+
+
+CREATE OR REPLACE function count_no_of_pages_udf(file_name string)
+  RETURNS integer
+  LANGUAGE PYTHON
+  RUNTIME_VERSION = '3.8'
+  PACKAGES = ('snowflake-snowpark-python','PyPDF2')
+  HANDLER = 'main_fn'
+AS
+$$
+from snowflake.snowpark.files import SnowflakeFile
+import PyPDF2
+def main_fn(file_name):
+    f=SnowflakeFile.open(file_name,'rb')
+    pdf_object=PyPDF2.PdfReader(f);
+    return len(pdf_object.pages)
+$$;
+
+select count_no_of_pages_udf(BUILD_SCOPED_FILE_URL( @s3_to_snowflake.PUBLIC.Snow_stage , 'sample_pdf_1.pdf' ));
+
+list @s3_to_snowflake.PUBLIC.Snow_stage;
+SELECT "name",count_no_of_pages_udf(BUILD_SCOPED_FILE_URL( @s3_to_snowflake.PUBLIC.Snow_stage , file_name )) as pdf_page_count FROM 
+(select "name",split_part("name",'/',-1) as file_name from TABLE(RESULT_SCAN(LAST_QUERY_ID())));
+
+
+
+
+--create the external stage with directory table enabled
+create or replace stage s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt url="{s3 location}" 
+credentials=(aws_key_id='{AWS Access Key}'
+aws_secret_key='{AWS Secret Key}')
+Directory=(ENABLE=TRUE);
+
+list @s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt;
+
+select * from directory(@s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt);
+
+SELECT RELATIVE_PATH,count_no_of_pages_udf(BUILD_SCOPED_FILE_URL( @s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt , RELATIVE_PATH )) as pdf_page_count FROM directory(@s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt); 
+
+alter stage s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt refresh;
+
+--create the external stage with directory table enabled & automatic refresh
+create or replace stage s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt_auto_refresh url="{s3 location}" 
+credentials=(aws_key_id='{AWS Access Key}'
+aws_secret_key='{AWS Secret Key}')
+Directory=(ENABLE=TRUE AUTO_REFRESH=TRUE);
+
+desc stage  s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt_auto_refresh;
+
+
+SELECT RELATIVE_PATH,count_no_of_pages_udf(BUILD_SCOPED_FILE_URL( @s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt_auto_refresh , RELATIVE_PATH )) as pdf_page_count FROM directory(@s3_to_snowflake.PUBLIC.Snow_stage_directory_table_yt_auto_refresh); 
