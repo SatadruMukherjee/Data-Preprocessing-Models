@@ -1,0 +1,151 @@
+VM Launch:
+----
+ec2-ubuntu machine
+
+Installation:
+-------------
+sudo su
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.34.0/install.sh | bash
+. ~/.nvm/nvm.sh
+nvm install node
+nvm --version
+npm install -g artillery@latest
+artillery version
+artillery dino -m "Knowledge Amplifier" -r
+
+
+
+Case 1:
+--------
+{API (Base URL)}
+
+/firstdemo
+
+YAML File:
+-----------
+firstdemo.yml
+
+config:
+  target: 'https://httpbin.org/'
+  phases:
+    - duration: 5
+      arrivalRate: 2
+scenarios:
+  - flow:
+    - get:
+        url: "/get"
+
+config:
+  target: '{API (Base URL)}'
+  phases:
+    - duration: 5
+      arrivalRate: 2
+scenarios:
+  - flow:
+    - get:
+        url: "/firstdemo"		
+
+
+
+		
+Run the code:
+-------------
+DEBUG=http* artillery run /home/ubuntu/firstdemo.yml
+
+Understanding Summary:
+-----------------------
+All VUs finished. Total time: {}
+http.codes.<status_code>--Number of codes received for each specific status code.
+http.request_rate--Rate of http requests done over the time period.
+http.requests -- Number of HTTP requests made.
+http.responses -- Number of HTTP responses received.
+
+
+
+Case 2:
+---------
+seconddemo.yml
+		
+config:
+  target: '{API (Base URL)}'
+  phases:
+    - name: reduce_load
+      duration: 3h
+      arrivalRate: 1
+    - name: nothing
+      pause: 2m
+    - name: stress
+      duration: 2m
+      arrivalRate: 3
+scenarios:
+  - flow:
+    - get:
+        url: "/firstdemo"
+		
+		
+Shell Script:
+---------------
+seconddemo.sh
+
+DEBUG=http* artillery run /home/ubuntu/seconddemo.yml
+
+Code run:
+----------
+chmod 755 seconddemo.sh
+nohup "/home/ubuntu/seconddemo.sh" > /home/ubuntu/seconddemo.out 2>&1 &		
+		
+[1] 3042		
+		
+Case 3:
+---------
+thirddemo.yml	
+
+config:
+  target: https://www.hccreference.com
+  phases:
+    - name: high_traffic
+      duration: 2m
+      arrivalRate: 2
+    - name: nothing
+      pause: 1m
+    - name: stress
+      duration: 10
+      arrivalRate: 32
+  payload:
+    path: /home/ubuntu/extarcted_data_for_testing30k.csv
+    order: sequence           # default: random
+    loadAll: true             
+    skipHeader: true          # default: false  
+    delimiter: ","            # default: ,
+    skipEmptyLines: true      # default: true
+    fields:
+      - "dos_year"
+      - "drf"
+      - "dx_hcc"
+      - "search"
+
+scenarios:
+- name: testhcc
+  flow:
+  - post:
+      url: /api/search
+      headers:
+        Content-Type: application/json
+      json:
+        dos_year: "{{ dos_year }}"
+        drf: "{{ drf }}"
+        dx_hcc: "{{ dx_hcc }}"
+        search: "{{ search }}"	
+		
+Shell Script:
+---------------
+thirddemo.sh
+
+DEBUG=http* artillery run /home/ubuntu/thirddemo.yml
+
+Code run:
+----------
+chmod 755 thirddemo.sh
+nohup "/home/ubuntu/thirddemo.sh" > /home/ubuntu/thirddemo.out 2>&1 &		
+
+3154
