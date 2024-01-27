@@ -1,0 +1,244 @@
+Krish Naik Sir's course link:https://youtu.be/8vmKtS8W7IQ?si=qXkM9cawo0X4HhM9
+
+Section 2 Reference:
+---------------------
+
+Dockerfile:
+--------------
+FROM python:3.7
+COPY . /app
+WORKDIR /app
+RUN pip install -r requirements.txt
+CMD ["python","app.py"]
+
+FROM
+
+The FROM instruction specifies the base image that the container will be built on top of. This instruction is typically the first one in a Dockerfile and is used to set the base image for the container. The format of the instruction is:
+FROM <image>
+
+COPY
+
+Use the COPY instruction to copy local files from the host machine to the current working directory:
+COPY package.json /app/
+
+WORKDIR
+
+In a Dockerfile, the WORKDIR instruction sets the working directory for any command that follows it in the Dockerfile. This means that any commands that run in the container will be executed relative to the specified directory. Below is the format of the instruction :
+WORKDIR <directory>
+
+
+RUN
+Use the “RUN” instruction to execute commands that will run during the image build process:
+RUN <command_name>
+ 
+
+CMD
+
+In a Dockerfile, the CMD instruction sets the command that will be executed when a container is run from the image. The format of the instruction is:
+
+CMD ["executable","param1","param2",...]
+
+ENV
+
+Use the ENV instruction to set environment variables inside the image which will be available during build time as well as in a running container. For example, to set the NODE_ENV environment variable to production, you would use the following command:
+ENV NODE_ENV production
+
+Step 1:
+-------
+AWS Linux
+sudo yum update -y
+sudo amazon-linux-extras install docker
+sudo service docker start
+sudo usermod -a -G docker ec2-user
+
+Step 2:
+-------
+Logout -- login
+
+Step 3:
+-------
+check if the docker is running or not
+docker info
+
+Step 4:
+--------
+sudo yum -y install git
+git --version
+mkdir hello_docker 
+git clone https://github.com/krishnaik06/Docker-For-Data-Science.git hello_docker
+cd hello_docker
+ls
+cd 'Hello World'
+
+Step 5:
+--------
+Converts your Dockerfile into an image: docker build -t welcome-app .
+
+To view all the images: docker image ls
+
+run command uses the created docker image to run a container: docker run -p 5000:5000 welcome-app
+
+
+To view all running containers you can use any of below 2 commands--
+i)docker container ls
+ii)docker ps
+These commands essentially serve the same purpose, displaying information about running containers. The commands are interchangeable, and they provide similar output.
+To display all containers, including stopped ones: docker ps -a
+
+
+To stop a container: docker stop container id(docker stop ca661e7a7e11)
+Note: Although we can stop container , but still images will be there : docker images
+
+
+To delete a conatiner:docker container rm <container_id_or_name>
+
+
+To delete an image: docker image rm <image_id_or_name>
+
+
+Section 3 Reference:
+---------------------
+https://docs.aws.amazon.com/lambda/latest/dg/python-image.html#python-image-instructions
+
+
+Section 4 Reference:
+---------------------
+
+Docker install:
+-----------------
+sudo yum update -y
+sudo amazon-linux-extras install -y docker
+sudo service docker start
+sudo usermod -a -G docker ec2-user
+
+Create directory:
+------------------
+mkdir hello_docker 
+cd hello_docker
+
+
+Dockerfile:
+------------
+FROM python:3.8
+COPY . /app
+WORKDIR /app
+RUN pip install -r requirements.txt
+CMD ["python","app.py"]
+
+
+vi app.py:
+-----------
+
+from flask import Flask,request
+import requests
+
+app=Flask(__name__)
+
+@app.route('/')
+def hello_world():
+    return "Hello World , Welcome to Bitcoin API"
+
+@app.route('/get_bitcoin_price',methods=['GET'])
+def data_extractor():
+    message=requests.get('https://api.coinbase.com/v2/prices/btc-usd/spot')
+    return message.text
+	
+if __name__=='__main__':
+    app.run(host="0.0.0.0",port=5000)
+
+vi requirements.txt:
+---------------------
+Flask
+requests
+urllib3==1.26.6
+
+Run Docker:
+-------------
+Converts your Dockerfile into an image: docker build -t welcome-app .
+
+To view all the images: docker image ls
+
+run command uses the created docker image to run a container: docker run -p 5000:5000 welcome-app
+--------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+Section 5 Reference:
+---------------------
+Docker install:
+-----------------
+sudo yum update -y
+sudo amazon-linux-extras install -y docker
+sudo service docker start
+sudo usermod -a -G docker ec2-user
+
+Create directory:
+------------------
+mkdir hello_docker 
+cd hello_docker
+
+
+Dockerfile:
+------------
+FROM python:3.8
+COPY . /app
+WORKDIR /app
+RUN pip install -r requirements.txt
+CMD ["python","app.py"]
+
+
+vi app.py:
+-----------
+import requests
+import boto3
+import pytz
+from datetime import datetime
+import uuid
+
+# Set your AWS credentials and region for DynamoDB
+region_name = 'us-east-1'
+ist = pytz.timezone('Asia/Kolkata')  # Indian Standard Time
+current_time = datetime.now(ist).isoformat()
+# Set your DynamoDB table name
+table_name = 'bitcoin_price_storer'
+# Set the REST API endpoint
+api_url = 'https://api.coinbase.com/v2/prices/btc-usd/spot'
+
+# Create a DynamoDB client
+dynamodb = boto3.client('dynamodb',region_name=region_name)
+
+# Function to create an item in DynamoDB table
+def put_item_to_dynamodb(item):
+    dynamodb.put_item(TableName=table_name, Item=item)
+
+def main():
+  # Fetch data from the REST API
+  response = requests.get(api_url)
+  data = response.json()
+
+  data_to_ingest={"amount":{"S":data["data"]["amount"]},"base":{"S":data["data"]["base"]},"currency":{"S":data["data"]["currency"]},"timestamp":{"S":current_time},"uuid":{"S":str(uuid.uuid4())}}
+  put_item_to_dynamodb(data_to_ingest)
+  print(f'Item {data_to_ingest} added to DynamoDB table {table_name}.')
+
+  print('Data transfer complete.')
+
+main()
+
+vi requirements.txt:
+---------------------
+requests
+urllib3==1.26.6
+boto3
+pytz
+uuid
+
+Run Docker:
+-------------
+Converts your Dockerfile into an image: docker build -t welcome-app .
+
+To view all the images: docker image ls
+
+docker run  welcome-app
+
+
