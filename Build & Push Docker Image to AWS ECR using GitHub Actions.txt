@@ -1,0 +1,36 @@
+Reference:
+------------
+https://github.com/aws-actions/amazon-ecr-login
+https://docs.aws.amazon.com/lambda/latest/dg/python-image.html
+https://github.com/SatadruMukherjee/Data-Preprocessing-Models/blob/main/Github%20Action%20with%20AWS.txt
+
+Github Action Code:
+-----------------------
+name: ecr_docker_deployment
+on: [push]
+jobs:
+  docker_cicd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: 
+          aws-secret-access-key: 
+          aws-region: us-east-1
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push docker image to Amazon ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: demoytcicdgithubaction
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+          aws lambda update-function-code \
+            --function-name demoytcicdecrtest \
+            --image-uri $REGISTRY/$REPOSITORY:$IMAGE_TAG
