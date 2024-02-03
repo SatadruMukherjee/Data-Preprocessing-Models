@@ -1,0 +1,47 @@
+
+
+Step 1:
+--------
+Upload requirements.txt, app.py & test.py in s3 folder
+
+Dockerfile:
+--------------
+FROM python:3.7
+ARG AWS_ACCESS_KEY_ID
+ARG AWS_SECRET_ACCESS_KEY
+ARG AWS_DEFAULT_REGION
+COPY . /app
+WORKDIR /app
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+RUN unzip awscliv2.zip
+RUN ./aws/install
+RUN aws s3 cp --recursive s3://gluezipp/demoyttestdockerset/ /app
+RUN pip install -r requirements.txt
+CMD ["python","app.py"]
+
+In Host:
+--------
+export AWS_ACCESS_KEY_ID=AKIA4ASLMUJL7WX73WBK
+export AWS_SECRET_ACCESS_KEY=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
+export AWS_DEFAULT_REGION=us-east-1
+
+General Code:
+---------------
+docker build -t welcome-app .
+
+docker build --build-arg AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID --build-arg AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY --build-arg AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION -t welcome-app .
+
+
+
+Run Container:
+-----------------
+docker run -p 5000:5000 welcome-app
+
+Open another console:
+------------------------
+docker container ls
+docker exec -it bf7f40daab84 sh
+
+Observation: The file is not there
+
+
