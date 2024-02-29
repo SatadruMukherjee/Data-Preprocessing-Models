@@ -1,0 +1,144 @@
+s3 bucket:
+DynamoDB:
+
+Docker Install:
+---------------
+AWS Linux
+sudo yum update -y
+sudo amazon-linux-extras install docker
+sudo service docker start
+sudo usermod -a -G docker ec2-user
+
+mkdir lambdafargate
+cd lambdafargate
+
+requirements.txt:
+---------------------
+boto3
+
+Dockerfile:
+-----------
+# Use an official Python runtime as a parent image
+FROM python:3.8-slim
+
+# Set the working directory to /app
+WORKDIR /app
+
+# Copy the current directory contents into the container at /app
+COPY . /app
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Run script.py when the container launches
+CMD ["echo" "hello"]
+
+["python","script.py","demoytlambdabatchtest","Setosa1.csv"]
+
+script.py:
+----------
+import boto3
+import csv
+import sys
+from io import StringIO
+
+def main(bucket, key):
+  s3_client = boto3.client('s3',region_name='us-east-1')
+  dynamodb_client = boto3.resource('dynamodb',region_name='us-east-1')
+
+  # Read the CSV file from S3
+  file_obj = s3_client.get_object(Bucket=bucket, Key=key)
+  csv_content = file_obj['Body'].read().decode('utf-8')
+
+  # Define the DynamoDB table
+  table = dynamodb_client.Table('iris_dataset')
+
+  # Read the CSV content
+  csv_reader = csv.DictReader(StringIO(csv_content))
+
+  # Iterate through the CSV and write to DynamoDB
+  for row in csv_reader:
+    Id = int(row['Id'])
+    SEPAL_LENGTH = row['SEPAL_LENGTH']
+    SEPAL_WIDTH = (row['SEPAL_WIDTH'])
+    PETAL_LENGTH = row['PETAL_LENGTH']
+    PETAL_WIDTH = row['PETAL_WIDTH']
+    CLASS_NAME = row['CLASS_NAME']
+
+    # Write to DynamoDB
+    table.put_item(
+    Item={
+    'Id':Id,
+    'SEPAL_LENGTH': SEPAL_LENGTH,
+    'SEPAL_WIDTH': SEPAL_WIDTH,
+    'PETAL_LENGTH': PETAL_LENGTH,
+    'PETAL_WIDTH': PETAL_WIDTH,
+    'CLASS_NAME':CLASS_NAME
+    }
+    )
+
+  print('CSV processed successfully!')
+
+if __name__ == "__main__":
+    # Extract command-line arguments
+    if len(sys.argv) != 3:
+        print("Usage: python script.py <S3_BUCKET_NAME> <S3_KEY>")
+        sys.exit(1)
+
+    s3_bucket = sys.argv[1]
+    s3_key = sys.argv[2]
+
+    # Execute the main function with provided arguments
+    main(s3_bucket, s3_key)
+	
+Docker Image Build & Test:
+---------------------------
+ECR Push
+
+AWS Batch Components Creation
+
+Batch IAM Role creation --dynmaodb , ecs task execution role , s3 access
+
+Lambda Function:
+------------------
+import boto3
+import json
+
+def lambda_handler(event, context):
+    print(event)
+    # Extract necessary information from the S3 event
+    s3_bucket = event['Records'][0]['s3']['bucket']['name']
+    s3_key = event['Records'][0]['s3']['object']['key']
+
+    # Specify your AWS Batch job definition name
+    job_definition_name = '{}'
+
+    # Specify your AWS Batch job queue name
+    job_queue_name = '{}'
+
+    # Specify the command to pass to the AWS Batch job
+    command = f"python script.py {s3_bucket} {s3_key}"
+    print("Executing the command : ", command)
+    # Create an AWS Batch client
+    batch_client = boto3.client('batch')
+
+    # Submit a job to AWS Batch
+    response = batch_client.submit_job(
+        jobName='{}',
+        jobQueue=job_queue_name,
+        jobDefinition=job_definition_name,
+        containerOverrides={
+            'command': command.split(' ')
+        },
+        retryStrategy={
+            'attempts': 1
+        },
+    )
+
+    # Print the AWS Batch job response
+    print(json.dumps(response, indent=2))
+
+    return {
+        'statusCode': 200,
+        'body': json.dumps('AWS Batch job submitted successfully!')
+    }
