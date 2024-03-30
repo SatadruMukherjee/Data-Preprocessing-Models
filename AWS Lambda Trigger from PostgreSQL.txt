@@ -1,0 +1,91 @@
+Step 1: Create Postgres Instance
+
+Instance identifier: 
+Master User Name:
+Master Password: 
+Security Group : 
+Database Port: 
+DB Name: 
+
+Step 2: Create the Lambda Function
+
+import json
+from time import sleep
+
+def lambda_handler(event, context):
+    print(event)
+    sleep(2)
+    # TODO implement
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
+
+
+Step 3: Create IAM Role with Lambda Access & Assign to AWS RDS
+
+Step 4: Connect to DB 
+
+Driver: 
+
+URL: jdbc:postgresql://host:port/name_of_database  
+Username:
+Password:
+
+
+Step 5: Run SQL Query:
+
+SELECT current_database();
+
+CREATE EXTENSION IF NOT EXISTS aws_lambda CASCADE;
+
+--sync
+SELECT * from aws_lambda.invoke(aws_commons.create_lambda_function_arn('arn:aws:lambda:us-east-1:825865577047:function:triggerfromdbrds', 'us-east-1'), 
+'{"body": "Hello from Postgres second time!"}'::json );
+
+--async
+SELECT * FROM aws_lambda.invoke(aws_commons.create_lambda_function_arn('arn:aws:lambda:us-east-1:825865577047:function:triggerfromdbrds', 'us-east-1'), 
+'{"body": "Hello from Postgres async!"}'::json, 'Event');
+
+--create table
+-- Create the inventory table
+CREATE TABLE inventory (
+    id SERIAL PRIMARY KEY,
+    product_name VARCHAR(100) NOT NULL,
+    quantity INTEGER NOT NULL,
+    price DECIMAL(10, 2) NOT NULL
+);
+
+-- Insert some sample data into the inventory table
+INSERT INTO inventory (product_name, quantity, price) VALUES ('Product A', 10, 50.00);
+INSERT INTO inventory (product_name, quantity, price) VALUES ('Product B', 5, 40.00);
+INSERT INTO inventory (product_name, quantity, price) VALUES ('Product C', 0, 30.00);
+
+--create trigger
+-- Create or replace the function to invoke Lambda with inserted row as input
+CREATE OR REPLACE FUNCTION invoke_lambda_on_insert()
+RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM aws_lambda.invoke(
+        aws_commons.create_lambda_function_arn('arn:aws:lambda:us-east-1:825865577047:function:triggerfromdbrds'),
+        row_to_json(NEW),
+        'Event'
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create or replace the trigger to call the function on insert
+CREATE TRIGGER call_lambda_on_insert
+AFTER INSERT ON inventory
+FOR EACH ROW
+EXECUTE FUNCTION invoke_lambda_on_insert();
+
+INSERT INTO inventory (product_name, quantity, price) VALUES ('Product E', 0, 30.00);
+INSERT INTO inventory (product_name, quantity, price) VALUES ('Product F', 0, 30.00);
+INSERT INTO inventory (product_name, quantity, price) VALUES ('Product G', 0, 30.00);
+;
+
+INSERT INTO inventory (product_name, quantity, price) VALUES ('Product H', 0, 30.00),('Product I', 0, 30.00);
+
+SELECT * FROM inventory;
