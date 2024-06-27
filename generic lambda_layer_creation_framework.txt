@@ -1,0 +1,202 @@
+Use host volume in Docker:
+===========================
+In certain situation, such as when developing new containeraized applications, we might need to consume data from a certain folder from host.
+
+Install Docker:
+===============
+sudo yum update -y
+sudo amazon-linux-extras install docker -y
+sudo service docker start
+sudo usermod -a -G docker ec2-user
+
+Test Docker is installed or not:
+=================================
+docker info
+
+Create directory:
+=================
+mkdir hello_docker 
+cd hello_docker
+
+
+Dockerfile:
+================
+FROM python:3.7
+COPY . /app
+WORKDIR /app
+RUN pip install -r requirements.txt
+CMD ["python","app.py"]
+
+
+vi app.py:
+==========
+
+import requests
+import pytz
+from datetime import datetime
+import uuid
+
+ist = pytz.timezone('Asia/Kolkata')  # Indian Standard Time
+current_time = datetime.now(ist).isoformat()
+
+# Set the REST API endpoint
+api_url = 'https://api.coinbase.com/v2/prices/btc-usd/spot'
+
+def main():
+  # Fetch data from the REST API
+  response = requests.get(api_url)
+  data = response.json()
+
+  data_to_ingest={"amount":{"S":data["data"]["amount"]},"base":{"S":data["data"]["base"]},"currency":{"S":data["data"]["currency"]},"timestamp":{"S":current_time}}
+  print("The extracted data is : ",data_to_ingest)
+
+main()
+
+
+vi requirements.txt:
+====================
+pytz
+requests
+urllib3==1.26.6
+
+
+Run Docker:
+============
+Converts your Dockerfile into an image: docker build -t welcome-app .
+
+To view all the images: docker image ls
+
+run command uses the created docker image to run a container: docker run  welcome-app
+
+
+Make changes in the existing code:
+==================================
+import requests
+import pytz
+from datetime import datetime
+import uuid
+
+ist = pytz.timezone('Asia/Kolkata')  # Indian Standard Time
+current_time = datetime.now(ist).isoformat()
+
+# Set the REST API endpoint
+api_url = 'https://api.coinbase.com/v2/prices/btc-usd/spot'
+
+def main():
+  # Fetch data from the REST API
+  response = requests.get(api_url)
+  data = response.json()
+
+  data_to_ingest={"amount":{"S":data["data"]["amount"]},"base":{"S":data["data"]["base"]},"currency":{"S":data["data"]["currency"]},"timestamp":{"S":current_time},"uuid":{"S":str(uuid.uuid4())}}
+  print("The extracted data is : ",data_to_ingest)
+
+main()
+
+
+Run the Docker Conatiner without building the image again:
+===========================================================
+docker run  welcome-app
+
+Run the Docker Conatiner without building the image again but with host volume mounting:
+========================================================================================
+docker run -v "$PWD":/app  welcome-app
+
+
+Container to host communication using the concept of host volume mounting:
+============================================================================
+FROM python:3.8
+COPY . /app
+WORKDIR /app
+CMD ["touch","test_file.txt"]
+
+
+
+Step by step Layer Creation:
+============================
+mkdir layer
+cd layer
+
+vi requirements.txt
+pandas
+numpy
+requests
+
+docker run --rm -it -v "$PWD":/app -w "/app" "public.ecr.aws/sam/build-python3.12" /bin/bash
+
+pip install -r requirements.txt -t python/lib/python3.12/site-packages/
+
+zip -r pandas_numpy_requests.zip *
+
+aws lambda publish-layer-version --layer-name "pandas_numpy_requests_from_docker" --compatible-runtimes "python3.12" --zip-file "fileb://pandas_numpy_requests.zip"
+
+
+
+1 Liner Command:
+================
+mkdir layer1
+cd layer1
+
+vi requirements.txt
+pandas
+numpy
+requests
+
+docker run --rm -v "$PWD":/app -w "/app" "public.ecr.aws/sam/build-python3.12" /bin/bash -c "pip install -r requirements.txt -t python/lib/python3.12/site-packages/ && zip -r lambda_layer1.zip *"
+
+aws lambda publish-layer-version --layer-name "one_liner" --compatible-runtimes "python3.12" --zip-file "fileb://lambda_layer1.zip"
+
+
+
+
+Github Action for Automatic Lambda Layer build:
+================================================
+
+
+name: selective_run
+on: 
+   push:
+jobs:
+  notification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: 
+          aws-secret-access-key: 
+          aws-region: us-east-1
+  
+      - name: Update lambda layer for Pandas
+        env: 
+              runtime: python3.12
+              requirements_file: aws/lambda_layer_builder/pandas.txt
+              layer_name: pdt_lambda_layer_1
+              description: "Python Layer for Pandas, numpy"
+        run: |
+            output_folder=$(mktemp -d -t temp-dir-XXXXXX)
+            echo "Temporary directory created at $output_folder"
+            echo "Executing : cp $requirements_file $output_folder/requirements.txt"
+            cp $requirements_file $output_folder/requirements.txt
+            zip_command="zip -r layer.zip *"
+            docker_image="public.ecr.aws/sam/build-$runtime:latest"
+            echo "Docker Base image to be used: $docker_image"
+            volume_params="-v $output_folder:/layer"
+            echo "Volume Parameter to be used: $volume_params"
+            package_folder="python/lib/$runtime/site-packages/"
+            echo "Pip install will happen at : $package_folder"
+            install_command="pip install -r requirements.txt -t $package_folder"
+            echo "Execution: docker run --rm $volume_params -w \"/layer\" \"$docker_image\" /bin/bash -c \"$install_command && $zip_command\""
+            docker run --rm $volume_params -w "/layer" "$docker_image" /bin/bash -c "$install_command && $zip_command"
+            
+            echo "Uploading layer $name to AWS"
+            echo "Executing: aws lambda publish-layer-version --layer-name \"$layer_name\" --compatible-runtimes \"$runtime\" --zip-file \"fileb://${output_folder}/layer.zip\" --description \"$description\""
+            aws lambda publish-layer-version --layer-name "$layer_name" --compatible-runtimes "$runtime" --zip-file "fileb://${output_folder}/layer.zip" --description "$description"
+            echo "Upload complete"
+            
+            echo "Cleaning up"
+            rm -rf output_folder
+            echo "Temporary directory removed"    
+      
