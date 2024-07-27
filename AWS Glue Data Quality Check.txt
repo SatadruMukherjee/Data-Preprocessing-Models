@@ -1,0 +1,165 @@
+Jar Download: https://pypi.org/project/pydeequ/
+Used Python Module: pydeequ==1.1.0
+
+Glue Job:
+===========
+import os
+os.environ['SPARK_VERSION'] = '3.1'
+
+import pydeequ
+from pydeequ.checks import *
+from pydeequ.verification import *
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+import boto3
+
+spark = (SparkSession
+             .builder
+             .config("spark.jars.packages", pydeequ.deequ_maven_coord)
+             .config("spark.jars.excludes", pydeequ.f2j_maven_coord).appName('Test Data Quality')
+             .getOrCreate())
+            
+input_path='s3://dqcheckyt/input_file/set2_proper.csv'
+dataset = spark.read.option('header', 'true').option("delimiter", ",").csv(input_path)
+
+print("Schema of input file:")
+dataset.printSchema()
+
+check = Check(spark, CheckLevel.Warning, "Glue PyTest")
+
+
+checkResult = VerificationSuite(spark) \
+        .onData(dataset) \
+        .addCheck(check.isUnique('Id') \
+            .isComplete("CLASS_NAME")  \
+            .isNonNegative("PETAL_LENGTH")  \
+            .isContainedIn("CLASS_NAME",["Iris-virginica","Iris-setosa"])) \
+        .run()
+
+
+print("Showing VerificationResults:")
+checkResult_df = VerificationResult.checkResultsAsDataFrame(spark, checkResult)
+checkResult_df.show(truncate=False)
+
+output_path="s3://dqcheckyt/validation_output/"
+checkResult_df.repartition(1).write.option("header", "true").mode('append').csv(output_path, sep=',')
+
+
+# Filtering for any failed data quality constraints
+df_checked_constraints_failures = \
+        (checkResult_df[checkResult_df['constraint_status'] == "Failure"])
+
+
+if df_checked_constraints_failures.count() > 0:
+  deequ_check_pass = "Fail"
+else:
+  deequ_check_pass = "Pass"
+    
+# Print the value of deequ_check_pass environment variable 
+print("deequ_check_pass = ", deequ_check_pass)
+
+Glue Data Quality Transformation:
+====================================
+import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from awsgluedq.transforms import EvaluateDataQuality
+from awsglue.dynamicframe import DynamicFrame
+
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+
+# Script generated for node Amazon S3
+
+input_path=''
+dataset = spark.read.option('header', 'true').option("delimiter", ",").option('inferSchema',True).csv(input_path)
+dynamic_df = DynamicFrame.fromDF(dataset, glueContext)
+
+
+# Script generated for node Evaluate Data Quality
+EvaluateDataQuality_node1722006617497_ruleset = """
+    # Example rules: Completeness "colA" between 0.4 and 0.8, ColumnCount > 10
+    Rules = [
+       IsUnique "Id",
+       IsComplete "CLASS_NAME",
+       ColumnValues "PETAL_LENGTH">0,
+     ColumnValues "CLASS_NAME" in [ "Iris-virginica","Iris-setosa"] 
+    ]
+"""
+
+EvaluateDataQuality_node1722006617497 = EvaluateDataQuality().process_rows(frame=dynamic_df, ruleset=EvaluateDataQuality_node1722006617497_ruleset, publishing_options={"dataQualityEvaluationContext": "EvaluateDataQuality_node1722006617497", "enableDataQualityCloudWatchMetrics": True, "enableDataQualityResultsPublishing": True}, additional_options={"performanceTuning.caching":"CACHE_NOTHING","observations.scope":"ALL"})
+
+# Script generated for node rowLevelOutcomes
+rowLevelOutcomes_node1722006834525 = SelectFromCollection.apply(dfc=EvaluateDataQuality_node1722006617497, key="rowLevelOutcomes", transformation_ctx="rowLevelOutcomes_node1722006834525")
+
+# Script generated for node Amazon S3
+checkResult_df=rowLevelOutcomes_node1722006834525.toDF()
+output_path=""
+checkResult_df.repartition(1).write.mode('append').parquet(output_path)
+
+
+Online Parquet Viewer:
+========================
+https://www.parquet-viewer.com/#parquet-online
+
+
+validating referential integrity of data between two data sets:
+================================================================
+import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from pyspark.context import SparkContext
+from awsglue.context import GlueContext
+from awsglue.job import Job
+from awsgluedq.transforms import EvaluateDataQuality
+from awsglue.dynamicframe import DynamicFrame
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+
+# Script generated for node emp_data
+# emp_data_node1722065248782 = glueContext.create_dynamic_frame.from_options(format_options={"quoteChar": "\"", "withHeader": True, "separator": ","}, connection_type="s3", format="csv", connection_options={"paths": ["s3://dqcheckyt/input_file/emp.csv"], "recurse": True}, transformation_ctx="emp_data_node1722065248782")
+
+input_path1=''
+emp_dataset = spark.read.option('header', 'true').option("delimiter", ",").option('inferSchema',True).csv(input_path1)
+emp_data_node1722065248782 = DynamicFrame.fromDF(emp_dataset, glueContext)
+
+# # Script generated for node dept_data
+# dept_data_node1722065253242 = glueContext.create_dynamic_frame.from_options(format_options={"quoteChar": "\"", "withHeader": True, "separator": ","}, connection_type="s3", format="csv", connection_options={"paths": ["s3://dqcheckyt/input_file/dept.csv"], "recurse": True}, transformation_ctx="dept_data_node1722065253242")
+
+input_path2=''
+dept_dataset = spark.read.option('header', 'true').option("delimiter", ",").option('inferSchema',True).csv(input_path2)
+dept_data_node1722065253242 = DynamicFrame.fromDF(dept_dataset, glueContext)
+
+# Script generated for node Evaluate Data Quality
+EvaluateDataQuality_node1722065307467_ruleset = """
+    # Example rules: Completeness "colA" between 0.4 and 0.8, ColumnCount > 10
+    Rules = [
+        ReferentialIntegrity "department_id" "referencedataset.department_id" = 1.0
+    ]
+"""
+
+EvaluateDataQuality_node1722065307467_additional_sources = {
+    "referencedataset": dept_data_node1722065253242
+}
+
+EvaluateDataQuality_node1722065307467 = EvaluateDataQuality().process_rows(frame=emp_data_node1722065248782, additional_data_sources=EvaluateDataQuality_node1722065307467_additional_sources, ruleset=EvaluateDataQuality_node1722065307467_ruleset, publishing_options={"dataQualityEvaluationContext": "EvaluateDataQuality_node1722065307467", "enableDataQualityCloudWatchMetrics": True, "enableDataQualityResultsPublishing": True}, additional_options={"performanceTuning.caching":"CACHE_NOTHING","observations.scope":"ALL"})
+
+# Script generated for node rowLevelOutcomes
+rowLevelOutcomes_node1722065476089 = SelectFromCollection.apply(dfc=EvaluateDataQuality_node1722065307467, key="rowLevelOutcomes", transformation_ctx="rowLevelOutcomes_node1722065476089")
+
+# Script generated for node Amazon S3
+checkResult_df=rowLevelOutcomes_node1722065476089.toDF()
+output_path=""
+checkResult_df.repartition(1).write.mode('append').parquet(output_path)
