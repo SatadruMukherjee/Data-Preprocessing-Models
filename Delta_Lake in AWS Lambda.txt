@@ -1,0 +1,149 @@
+lambda_function.py
+=================
+import os
+import boto3
+import pandas as pd
+from deltalake import DeltaTable
+from deltalake.writer import write_deltalake
+import json
+
+def get_s3_object(bucket, key):
+    """Get object from S3"""
+    s3_client = boto3.client('s3')
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        print(f"Successfully retrieved object from S3: {bucket}/{key}")
+        return response['Body']
+    except Exception as e:
+        print(f"Error reading from S3: {str(e)}")
+        raise
+
+def read_csv_from_s3(s3_object):
+    """Read CSV data from S3 object into pandas DataFrame"""
+    try:
+        df = pd.read_csv(s3_object)
+        print(f"Successfully read CSV with {len(df)} rows")
+        return df
+    except Exception as e:
+        print(f"Error parsing CSV: {str(e)}")
+        raise
+
+def write_to_delta(df, table_url):
+    """Write DataFrame to Delta Lake"""
+    try:
+        print(f"Attempting to write to Delta Lake at: {table_url}")
+        write_deltalake(table_url, df , mode='append')
+        print("Successfully wrote to Delta Lake")
+        return True
+    except Exception as e:
+        print(f"Error writing to Delta Lake: {str(e)}")
+        raise
+
+def lambda_handler(event, context):
+    """Main Lambda handler"""
+    try:
+        # Print the incoming event
+        print(f"Received event: {json.dumps(event)}")
+        
+        # Get environment variables
+        table_url = os.environ.get('TABLE_URL')
+        if not table_url:
+            raise ValueError("TABLE_URL environment variable is not set")
+        
+        print(f"Using TABLE_URL: {table_url}")
+        
+        # Get S3 event details
+        records = event.get('Records', [])
+        if not records:
+            raise ValueError("No records found in event")
+            
+        # Process each record (usually there will be one)
+        for record in records:
+            # Extract S3 information
+            bucket = record['s3']['bucket']['name']
+            key = record['s3']['object']['key']
+            
+            print(f"Processing file {key} from bucket {bucket}")
+            
+            # Get and process the file
+            s3_object = get_s3_object(bucket, key)
+            df = read_csv_from_s3(s3_object)
+            
+            # Write to Delta Lake
+            write_to_delta(df, table_url)
+            
+            print(f"Successfully processed {key}")
+        
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'message': 'Successfully processed CSV to Delta Lake'})
+        }
+        
+    except Exception as e:
+        error_message = str(e)
+        print(f"Error in lambda_handler: {error_message}")
+        print(f"Full error details: {repr(e)}")
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'error': error_message})
+        }
+
+Dockerfile:
+============
+FROM public.ecr.aws/lambda/python:3.12
+
+# Copy requirements.txt
+COPY requirements.txt ${LAMBDA_TASK_ROOT}
+
+# Install the specified packages
+RUN pip install -r requirements.txt
+
+# Copy function code
+COPY lambda_function.py ${LAMBDA_TASK_ROOT}
+
+# Set the CMD to your handler (could also be done as a parameter override outside of the Dockerfile)
+CMD [ "lambda_function.lambda_handler" ]	
+
+
+requirements.txt:
+=================
+pandas
+deltalake
+
+Github Action Code:
+-----------------------
+name: ecr_docker_deployment
+on: [push]
+jobs:
+  docker_cicd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: 
+          aws-secret-access-key: 
+          aws-region: us-east-1
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push docker image to Amazon ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: deltalakelambdayt
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+
+Athena SQL:
+============
+DROP TABLE IF EXISTS deltalake_db.lambda_delta;
+
+CREATE EXTERNAL TABLE deltalake_db.lambda_delta
+LOCATION 's3://{Bucket_Name}/delta_lake/'
+TBLPROPERTIES ('table_type' = 'DELTA');	
