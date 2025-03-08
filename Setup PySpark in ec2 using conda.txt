@@ -1,0 +1,105 @@
+Think of Conda as a more powerful virtualenv that not only handles virtual environments but also manages packages and dependencies across multiple languages (not just Python)
+
+
+Install Miniconda:
+===================
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash ~/Miniconda3-latest-Linux-x86_64.sh
+
+Check whether conda installed successfully or not:
+==================================================
+conda list
+
+PATH is an environment variable on Unix-like operating systems, DOS, OS/2, and Microsoft Windows, specifying a set of directories where executable programs are located.
+
+cat ~/.bashrc
+vi ~/.bashrc
+export PATH=~/miniconda3/bin:$PATH
+source ~/.bashrc
+conda list
+which python
+
+
+Configuring yml file for conda env setup(https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#creating-an-environment-file-manually)
+
+vi environment.yml
+
+name: pyspark_demo
+channels:
+  - conda-forge
+dependencies:
+  - findspark=2.0.1
+  - jupyter=1.0.0
+  - pyspark=3.5.0
+  - openjdk=11.0.13
+  - python=3.12
+  - python-dotenv
+  
+Note: A channel is a location (a URL) where conda can search for packages to install on your machine e.g. https://anaconda.org/conda-forge/repo
+  
+conda env create -f environment.yml
+
+conda activate pyspark_demo
+
+jupyter notebook  --generate-config
+
+vi /home/ec2-user/.jupyter/jupyter_notebook_config.py
+
+c.NotebookApp.ip = '*'
+c.NotebookApp.open_browser = False
+
+(Reference: https://testnb.readthedocs.io/en/stable/examples/Notebook/Configuring%20the%20Notebook%20and%20Server.html#running-a-public-notebook-server)
+
+jupyter notebook
+
+
+Spark Code:
+============
+
+import os
+from dotenv import load_dotenv
+import findspark
+findspark.init()
+findspark.find()
+
+import pyspark
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType
+
+spark = SparkSession.builder \
+    .appName("WriteToS3") \
+    .config("spark.jars.packages", "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262") \
+    .config("spark.hadoop.fs.s3a.access.key", "") \
+    .config("spark.hadoop.fs.s3a.secret.key", "") \
+    .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
+    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .getOrCreate()
+
+# Define schema
+schema = StructType([
+    StructField("id", IntegerType(), True),
+    StructField("name", StringType(), True),
+    StructField("age", IntegerType(), True)
+])
+
+# Create dummy data
+data = [
+    (1, "Alice", 25),
+    (2, "Bob", 30),
+    (3, "Charlie", 28)
+]
+
+# Create DataFrame
+df = spark.createDataFrame(data, schema=schema)
+
+# Show DataFrame
+df.show()
+
+# Define S3 path
+s3_path = "s3a://{Bucket Name}/test_conda/"
+
+# Write DataFrame to S3 in Parquet format
+df.write.mode("overwrite").parquet(s3_path)
+
