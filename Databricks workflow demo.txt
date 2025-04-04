@@ -103,7 +103,7 @@ payload = {
         "task_key": "task_1",
         "run_if": "ALL_SUCCESS",
         "notebook_task": {
-          "notebook_path": "/Workspace/Users/ghinku12345@gmail.com/count_computer",
+          "notebook_path": "/Workspace/Users/{Your user name}/count_computer",
           "source": "WORKSPACE"
         },
         "job_cluster_key": "transient_cluster_demo_yt",
@@ -155,7 +155,7 @@ payload = {
         ],
         "run_if": "ALL_SUCCESS",
         "notebook_task": {
-          "notebook_path": "/Workspace/Users/ghinku12345@gmail.com/count_printer",
+          "notebook_path": "/Workspace/Users/{Your user name}/count_printer",
           "source": "WORKSPACE"
         },
         "job_cluster_key": "transient_cluster_demo_yt",
@@ -172,7 +172,7 @@ payload = {
         ],
         "run_if": "ALL_SUCCESS",
         "notebook_task": {
-          "notebook_path": "/Workspace/Users/ghinku12345@gmail.com/read_excel_maven_lib_demo",
+          "notebook_path": "/Workspace/Users/{Your user name}/read_excel_maven_lib_demo",
           "source": "WORKSPACE"
         },
         "job_cluster_key": "transient_cluster_demo_yt",
