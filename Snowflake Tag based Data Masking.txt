@@ -1,0 +1,170 @@
+Generic Dynamic Data Masking:
+==============================
+use role SYSADMIN;
+
+Create or replace database demo_db;
+
+use DEMO_DB;
+
+
+DROP TABLE IF EXISTS DEMO_DB.PUBLIC.employee_info;
+
+create or replace table DEMO_DB.PUBLIC.employee_info(employee_id number,
+                     empl_join_date date,
+                     dept varchar(10),
+                     salary number,
+                     manager_id number);
+
+-- insert values into employee table
+insert into  DEMO_DB.PUBLIC.employee_info values(1,'2020-10-01','HR',40000,4),
+                                 (2,'2020-09-01','Technical',100000,9),
+                                 (3,'2020-09-01','Marketing',50000,5),
+                                 (4,'2020-09-01','HR',20000,5),
+                                 (5,'2020-09-01','HR',35000,9),
+                                 (6,'2021-09-01','Technical',90000,4),
+                                 (7,'2021-09-01','Marketing',10000,1);
+                                 
+select * from  DEMO_DB.PUBLIC.employee_info;
+
+
+USE ROLE ACCOUNTADMIN;
+
+--Currently Snowflake does not support different input output datatype for Masking Policy
+create or replace masking policy sensitive_info_masking_string as (val STRING) returns STRING ->
+  case
+    when current_role() in ('ACCOUNTADMIN') then val
+    else '****************'
+  end;
+  
+create or replace masking policy sensitive_info_masking_numbers as (val NUMBER) returns NUMBER ->
+  case
+    when current_role() in ('ACCOUNTADMIN') then (val)
+    else -1
+  end;
+
+  
+  
+  
+-- apply masking policy to a table column
+ALTER TABLE IF EXISTS DEMO_DB.PUBLIC.employee_info MODIFY COLUMN dept SET MASKING POLICY sensitive_info_masking_string; 
+ALTER TABLE IF EXISTS DEMO_DB.PUBLIC.employee_info MODIFY COLUMN salary SET MASKING POLICY sensitive_info_masking_numbers; 
+
+select * from  DEMO_DB.PUBLIC.employee_info ;
+ 
+
+use role SYSADMIN;
+ 
+SELECT * from DEMO_DB.PUBLIC.employee_info;
+
+
+Tag-based Data Masking:
+========================
+use role SYSADMIN;
+
+Create or replace database demo_db;
+
+use DEMO_DB;
+
+
+DROP TABLE IF EXISTS DEMO_DB.PUBLIC.employee_info;
+
+create or replace table DEMO_DB.PUBLIC.employee_info(employee_id number,
+                     empl_join_date date,
+                     dept varchar(10),
+                     salary number,
+                     manager_id number);
+
+-- insert values into employee table
+insert into  DEMO_DB.PUBLIC.employee_info values(1,'2020-10-01','HR',40000,4),
+                                 (2,'2020-09-01','Technical',100000,9),
+                                 (3,'2020-09-01','Marketing',50000,5),
+                                 (4,'2020-09-01','HR',20000,5),
+                                 (5,'2020-09-01','HR',35000,9),
+                                 (6,'2021-09-01','Technical',90000,4),
+                                 (7,'2021-09-01','Marketing',10000,1);
+
+
+CREATE OR REPLACE TAG pii_classifier;
+
+
+ALTER TABLE DEMO_DB.PUBLIC.employee_info MODIFY COLUMN
+salary SET TAG pii_classifier = 'pii_number';
+
+ALTER TABLE DEMO_DB.PUBLIC.employee_info MODIFY COLUMN
+dept SET TAG pii_classifier = 'pii_string';
+                                 
+                                 
+                                 
+select * from  DEMO_DB.PUBLIC.employee_info;
+
+
+USE ROLE ACCOUNTADMIN;
+
+--Currently Snowflake does not support different input output datatype for Masking Policy
+CREATE MASKING POLICY string_mask AS (val string) RETURNS string ->
+  CASE
+    WHEN  current_role() IN ('ACCOUNTADMIN') then val
+    when SYSTEM$GET_TAG_ON_CURRENT_COLUMN('pii_classifier') = 'pii_string' then '***MASKED***'
+  END;
+  
+CREATE MASKING POLICY number_mask AS (val number) RETURNS number ->
+  CASE
+    WHEN  current_role() IN ('ACCOUNTADMIN') then val
+    when SYSTEM$GET_TAG_ON_CURRENT_COLUMN('pii_classifier') = 'pii_number' then -1
+  END;
+
+ALTER TAG pii_classifier SET
+  MASKING POLICY string_mask,
+  MASKING POLICY number_mask;
+
+
+select * from  DEMO_DB.PUBLIC.employee_info ;
+ 
+
+use role SYSADMIN;
+ 
+SELECT * from DEMO_DB.PUBLIC.employee_info;
+
+
+
+--Reuse
+
+CREATE OR REPLACE TABLE DEMO_DB.PUBLIC.customer_details (
+    customer_id NUMBER,
+    full_name STRING,
+    email STRING,
+    phone_number STRING,
+    credit_score NUMBER,
+    age NUMBER
+);
+
+-- Insert some demo data
+INSERT INTO DEMO_DB.PUBLIC.customer_details VALUES
+(1, 'John Doe', 'john.doe@example.com', '123-456-7890', 750, 34),
+(2, 'Jane Smith', 'jane.smith@example.com', '987-654-3210', 680, 28),
+(3, 'Alice Johnson', 'alice.j@example.com', '555-222-1234', 720, 45);
+
+select * from DEMO_DB.PUBLIC.customer_details;
+
+use role accountadmin;
+
+-- Tag string columns
+ALTER TABLE DEMO_DB.PUBLIC.customer_details 
+    MODIFY COLUMN email SET TAG pii_classifier = 'pii_string';
+
+ALTER TABLE DEMO_DB.PUBLIC.customer_details 
+    MODIFY COLUMN phone_number SET TAG pii_classifier = 'pii_string';
+
+-- Tag number columns
+ALTER TABLE DEMO_DB.PUBLIC.customer_details 
+    MODIFY COLUMN credit_score SET TAG pii_classifier = 'pii_number';
+
+select * from DEMO_DB.PUBLIC.customer_details;
+
+
+use role SYSADMIN;
+ 
+SELECT * from DEMO_DB.PUBLIC.customer_details;
+
+
+
