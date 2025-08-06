@@ -1,0 +1,81 @@
+--The General Data Protection Regulation (GDPR) is an internationally recognized compliance standard that was created to safeguard an individual's right to privacy, particularly with regard to personal data. 
+
+--It is associated with the processing of personal data within the European Union (EU) countries.
+
+use role SYSADMIN;
+
+Create or replace database demo_db;
+
+use DEMO_DB;
+
+CREATE OR REPLACE TABLE employee_course_progress (
+    employee_id STRING,
+    employee_name STRING,
+    department STRING,
+    course_id STRING,
+    course_name STRING,
+    completion_percent NUMBER(5,2),
+    last_updated TIMESTAMP_NTZ
+);
+
+INSERT INTO employee_course_progress VALUES
+('E001', 'Alice', 'Data Engineering', 'C101', 'AWS Glue Basics', 100.00, CURRENT_TIMESTAMP()),
+('E002', 'Bob', 'Data Engineering', 'C101', 'AWS Glue Basics', 75.00, CURRENT_TIMESTAMP()),
+('E003', 'Charlie', 'Data Engineering', 'C101', 'AWS Glue Basics', 50.00, CURRENT_TIMESTAMP()),
+('E004', 'David', 'Analytics', 'C102', 'Power BI Reporting', 20.00, CURRENT_TIMESTAMP()),
+('E005', 'Eva', 'Analytics', 'C102', 'Power BI Reporting', 80.00, CURRENT_TIMESTAMP());
+
+Insert into employee_course_progress values ('E008', 'Soham', 'Visualization', 'C112', 'Tableau', 80.00, CURRENT_TIMESTAMP())
+
+select * from employee_course_progress;
+
+select * from employee_course_progress where employee_id='E005' and course_id='C102';
+
+
+SELECT
+  department,
+  course_id,
+  course_name,
+  ROUND(AVG(completion_percent), 2) AS avg_completion_percent,
+  COUNT(DISTINCT employee_id) AS total_employees
+FROM employee_course_progress
+GROUP BY department, course_id, course_name
+ORDER BY department, course_id;
+
+
+USE ROLE accountadmin;
+
+CREATE OR REPLACE AGGREGATION POLICY test_aggregation_policy
+  AS () RETURNS AGGREGATION_CONSTRAINT ->
+    CASE
+      WHEN CURRENT_ROLE() IN ('ACCOUNTADMIN')
+      THEN NO_AGGREGATION_CONSTRAINT()  
+      ELSE AGGREGATION_CONSTRAINT(MIN_GROUP_SIZE => 2)
+    END;
+
+ALTER TABLE employee_course_progress
+    SET AGGREGATION POLICY test_aggregation_policy;
+
+select * from employee_course_progress where employee_id='E005' and course_id='C102';
+
+select department,course_id,course_name, listagg(employee_id,', '),listagg(employee_name,', '),listagg(completion_percent,', ') from employee_course_progress
+GROUP BY department, course_id, course_name
+ORDER BY department, course_id;
+
+use role SYSADMIN;
+select * from employee_course_progress where employee_id='E005' and course_id='C102';
+
+
+SELECT
+  department,
+  course_id,
+  course_name,
+  ROUND(AVG(completion_percent), 2) AS avg_completion_percent,
+  COUNT(DISTINCT employee_id) AS total_employees
+FROM employee_course_progress
+GROUP BY department, course_id, course_name
+ORDER BY department, course_id;
+
+select department,course_id,course_name, listagg(employee_id),listagg(completion_percent) from employee_course_progress
+GROUP BY department, course_id, course_name
+ORDER BY department, course_id;
